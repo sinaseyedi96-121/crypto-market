@@ -1,0 +1,42 @@
+{
+  "BTCUSDT": {
+    "4h": {
+      "levels": {
+        "support": 62500.76,
+        "resistance": 64692.83
+      },
+      "price_at_post": 62850.0,
+      "message_id": 2,
+      "posted_at": 1783945101
+    },
+    "1d": {
+      "levels": {
+        "support": 57800.19,
+        "resistance": 64700.0
+      },
+      "price_at_post": 62846.0,
+      "message_id": 3,
+      "posted_at": 1783945109
+    }
+  },
+  "ETHUSDT": {
+    "4h": {
+      "levels": {
+        "support": 1772.63,
+        "resistance": 1846.0
+      },
+      "price_at_post": 1781.13,
+      "message_id": 4,
+      "posted_at": 1783945117
+    },
+    "1d": {
+      "levels": {
+        "support": 1512.0,
+        "resistance": 1846.0
+      },
+      "price_at_post": 1781.12,
+      "message_id": 5,
+      "posted_at": 1783945126
+    }
+  }
+}
