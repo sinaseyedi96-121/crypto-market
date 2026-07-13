@@ -5,6 +5,9 @@ on:
     - cron: '10 */4 * * *'   # every 4 hours, 10 min past the hour
   workflow_dispatch: {}       # lets you trigger a run manually from the Actions tab
 
+permissions:
+  contents: write   # needed so the "Commit updated state" step can push post_history.json
+
 jobs:
   post-update:
     runs-on: ubuntu-latest
