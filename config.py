@@ -41,8 +41,4 @@ CHART_DIR = "charts"
 STATE_FILE = "post_history.json"
 
 # ---- Mandatory footer appended in code (not left to the model to remember) ----
-DISCLAIMER = (
-    "\n\n⚠️ Educational content only, not financial advice. "
-    "This is market commentary, not a trade recommendation — do your own "
-    "research and trade at your own risk."
-)
+DISCLAIMER = "\n\n⚠️ Educational content, not financial advice."
