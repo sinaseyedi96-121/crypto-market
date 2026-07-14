@@ -31,12 +31,37 @@
     },
     "1d": {
       "levels": {
-        "support": 1512.0,
-        "resistance": 1846.0
+        "support": 1508.84,
+        "resistance": 1841.47,
+        "support_touches": 2,
+        "resistance_touches": 2,
+        "lookback": 180,
+        "zone_width": 29.73
       },
-      "price_at_post": 1781.12,
-      "message_id": 5,
-      "posted_at": 1783945126
+      "price_at_post": 1776.72,
+      "message_id": 13,
+      "posted_at": 1784021573,
+      "candle_closed_at": "2026-07-13T23:59:59.999000"
+    }
+  },
+  "_schedule": {
+    "market_map": "2026-07-14",
+    "deep_dive": "2026-07-14"
+  },
+  "XRPUSDT": {
+    "1d": {
+      "levels": {
+        "support": 1.02,
+        "resistance": 1.19,
+        "support_touches": 2,
+        "resistance_touches": 2,
+        "lookback": 180,
+        "zone_width": 0.02
+      },
+      "price_at_post": 1.0675,
+      "message_id": 13,
+      "posted_at": 1784021573,
+      "candle_closed_at": "2026-07-13T23:59:59.999000"
     }
   }
 }
