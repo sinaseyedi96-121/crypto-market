@@ -58,7 +58,8 @@
   },
   "_schedule": {
     "market_map": "2026-07-14",
-    "deep_dive": "2026-07-14"
+    "deep_dive": "2026-07-14",
+    "macro_close": "2026-07-15"
   },
   "XRPUSDT": {
     "1d": {
