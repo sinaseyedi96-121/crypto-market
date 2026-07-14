@@ -4,6 +4,8 @@ same persistence pattern as the rest of your pipelines (GitHub Actions
 runners are ephemeral, so this file is the only memory between runs).
 """
 
+from __future__ import annotations
+
 import json
 import os
 import config

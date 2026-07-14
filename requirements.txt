@@ -1,5 +1,6 @@
 requests
 pandas
+matplotlib
 mplfinance
 openai
 python-dotenv

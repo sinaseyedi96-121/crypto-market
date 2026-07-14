@@ -4,6 +4,7 @@ something this simple — matches the lightweight style of the rest of the repo)
 """
 
 import os
+import json
 import requests
 import config
 
@@ -26,6 +27,38 @@ def post_chart(chat_id: str, image_path: str, caption: str) -> dict:
         )
     resp.raise_for_status()
     return resp.json()["result"]
+
+
+def post_charts(chat_id: str, image_paths: list[str], caption: str) -> dict:
+    """Publish one image or a two-chart Telegram album as one content unit."""
+    if len(image_paths) == 1:
+        return post_chart(chat_id, image_paths[0], caption)
+
+    caption = caption[: config.TELEGRAM_CAPTION_LIMIT]
+    media = []
+    files = {}
+    try:
+        for index, image_path in enumerate(image_paths):
+            key = f"chart{index}"
+            item = {"type": "photo", "media": f"attach://{key}"}
+            if index == 0:
+                item["caption"] = caption
+            media.append(item)
+            files[key] = open(image_path, "rb")
+        response = requests.post(
+            f"{_base_url()}/sendMediaGroup",
+            data={"chat_id": chat_id, "media": json.dumps(media)},
+            files=files,
+            timeout=45,
+        )
+        response.raise_for_status()
+        messages = response.json()["result"]
+        result = dict(messages[0])
+        result["album_message_ids"] = [message["message_id"] for message in messages]
+        return result
+    finally:
+        for file_handle in files.values():
+            file_handle.close()
 
 
 def reply_to_message(chat_id: str, reply_to_message_id: int, text: str) -> dict:

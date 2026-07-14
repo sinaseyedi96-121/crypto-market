@@ -8,6 +8,10 @@ pandas_ta library. Two reasons:
      silently on a GitHub Actions runner.
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
 import pandas as pd
 import config
 
@@ -57,7 +61,9 @@ def compute_atr(high: pd.Series, low: pd.Series, close: pd.Series,
 
 def enrich(df: pd.DataFrame) -> pd.DataFrame:
     """Adds all indicator columns to a Binance OHLC DataFrame in place-safe manner."""
+    source = df.attrs.get("source", "Binance")
     df = df.copy()
+    df.attrs["source"] = source
     df["ema_fast"] = compute_ema(df["Close"], config.EMA_FAST)
     df["ema_slow"] = compute_ema(df["Close"], config.EMA_SLOW)
     df["rsi"] = compute_rsi(df["Close"])
@@ -66,30 +72,138 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     upper, mid, lower = compute_bbands(df["Close"])
     df["bb_upper"], df["bb_mid"], df["bb_lower"] = upper, mid, lower
     df["atr"] = compute_atr(df["High"], df["Low"], df["Close"])
+    df["atr_pct"] = df["atr"] / df["Close"] * 100
+    df["bb_width_pct"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_mid"] * 100
     return df
 
 
-def find_key_levels(df: pd.DataFrame, lookback=config.SWING_LOOKBACK) -> dict:
-    """Recent swing high/low used as a support/resistance zone to watch."""
+@dataclass
+class _LevelCluster:
+    values: list[float] = field(default_factory=list)
+    positions: list[int] = field(default_factory=list)
+
+    @property
+    def center(self) -> float:
+        return sum(self.values) / len(self.values)
+
+    @property
+    def touches(self) -> int:
+        return len(self.values)
+
+    @property
+    def last_position(self) -> int:
+        return max(self.positions)
+
+
+def _cluster_pivots(points: list[tuple[float, int]], tolerance: float) -> list[_LevelCluster]:
+    """Merge nearby pivot prices into repeated-touch support/resistance levels."""
+    clusters: list[_LevelCluster] = []
+    for value, position in sorted(points):
+        nearest = min(clusters, key=lambda c: abs(c.center - value), default=None)
+        if nearest is not None and abs(nearest.center - value) <= tolerance:
+            nearest.values.append(value)
+            nearest.positions.append(position)
+        else:
+            clusters.append(_LevelCluster([value], [position]))
+    return clusters
+
+
+def _pick_level(clusters: list[_LevelCluster], current_price: float, side: str,
+                sample_size: int) -> _LevelCluster | None:
+    if side == "support":
+        eligible = [c for c in clusters if c.center < current_price]
+    else:
+        eligible = [c for c in clusters if c.center > current_price]
+
+    repeated = [c for c in eligible if c.touches >= config.MIN_LEVEL_TOUCHES]
+    candidates = repeated or eligible
+    if not candidates:
+        return None
+
+    def score(cluster: _LevelCluster) -> float:
+        recency = cluster.last_position / max(sample_size - 1, 1)
+        distance_pct = abs(cluster.center - current_price) / current_price
+        return cluster.touches + 0.75 * recency - 5 * distance_pct
+
+    return max(candidates, key=score)
+
+
+def find_key_levels(df: pd.DataFrame, lookback=config.LEVEL_LOOKBACK) -> dict:
+    """Find significant nearby levels from repeated pivots over longer history."""
     recent = df.tail(lookback)
+    if len(recent) < config.PIVOT_WINDOW * 2 + 1:
+        raise ValueError("Not enough candles to calculate pivot levels")
+
+    window = config.PIVOT_WINDOW * 2 + 1
+    pivot_highs = recent["High"].eq(recent["High"].rolling(window, center=True).max())
+    pivot_lows = recent["Low"].eq(recent["Low"].rolling(window, center=True).min())
+
+    high_points = [(float(recent["High"].iloc[i]), i) for i in range(len(recent)) if pivot_highs.iloc[i]]
+    low_points = [(float(recent["Low"].iloc[i]), i) for i in range(len(recent)) if pivot_lows.iloc[i]]
+
+    current_price = float(recent["Close"].iloc[-1])
+    current_atr = float(recent["atr"].iloc[-1])
+    tolerance = max(current_atr * config.LEVEL_CLUSTER_ATR_MULTIPLIER, current_price * 0.003)
+
+    support = _pick_level(_cluster_pivots(low_points, tolerance), current_price, "support", len(recent))
+    resistance = _pick_level(_cluster_pivots(high_points, tolerance), current_price, "resistance", len(recent))
+
+    support_value = support.center if support else float(recent["Low"].min())
+    resistance_value = resistance.center if resistance else float(recent["High"].max())
+
     return {
-        "support": round(float(recent["Low"].min()), 2),
-        "resistance": round(float(recent["High"].max()), 2),
+        "support": round(support_value, 2),
+        "resistance": round(resistance_value, 2),
+        "support_touches": support.touches if support else 1,
+        "resistance_touches": resistance.touches if resistance else 1,
+        "lookback": len(recent),
+        "zone_width": round(tolerance, 2),
     }
+
+
+def _percentile_rank(series: pd.Series, lookback: int) -> float:
+    values = series.dropna().tail(lookback)
+    if values.empty:
+        return float("nan")
+    return float((values <= values.iloc[-1]).mean() * 100)
+
+
+def trend_state(df: pd.DataFrame) -> str:
+    last = df.iloc[-1]
+    earlier = df.iloc[-1 - min(config.TREND_SLOPE_LOOKBACK, len(df) - 1)]
+    fast_rising = last["ema_fast"] > earlier["ema_fast"]
+
+    if last["ema_fast"] > last["ema_slow"] and last["Close"] > last["ema_slow"] and fast_rising:
+        return "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
+    if last["ema_fast"] < last["ema_slow"] and last["Close"] < last["ema_slow"] and not fast_rising:
+        return "bearish: fast EMA below slow EMA, price below slow EMA, fast EMA falling"
+    return "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
 
 
 def summarize_for_prompt(df: pd.DataFrame, levels: dict) -> str:
     """Turns the last row of indicators into a compact text block for the LLM."""
     last = df.iloc[-1]
-    trend = "bullish (fast EMA above slow EMA)" if last["ema_fast"] > last["ema_slow"] else "bearish (fast EMA below slow EMA)"
-    macd_state = "MACD above signal (positive momentum)" if last["macd"] > last["macd_signal"] else "MACD below signal (negative momentum)"
+    trend = trend_state(df)
+    signal_relation = "above" if last["macd"] > last["macd_signal"] else "below"
+    zero_relation = "above" if last["macd"] > 0 else "below"
+    atr_percentile = _percentile_rank(df["atr_pct"], config.VOLATILITY_LOOKBACK)
+    bb_percentile = _percentile_rank(df["bb_width_pct"], config.VOLATILITY_LOOKBACK)
+    close_time = last.get("CloseTime", df.index[-1])
+    source = df.attrs.get("source", "Binance")
     return (
+        f"Price source: {source}\n"
+        f"Confirmed candle close time (UTC): {pd.Timestamp(close_time).isoformat()}\n"
         f"Last close: {last['Close']:.2f}\n"
-        f"EMA{config.EMA_FAST}: {last['ema_fast']:.2f} | EMA{config.EMA_SLOW}: {last['ema_slow']:.2f} -> {trend}\n"
+        f"EMA{config.EMA_FAST}: {last['ema_fast']:.2f} | EMA{config.EMA_SLOW}: {last['ema_slow']:.2f}\n"
+        f"Trend classification: {trend}\n"
         f"RSI({config.RSI_PERIOD}): {last['rsi']:.1f}\n"
-        f"{macd_state}\n"
-        f"Bollinger Bands: upper {last['bb_upper']:.2f} / mid {last['bb_mid']:.2f} / lower {last['bb_lower']:.2f}\n"
-        f"ATR({config.ATR_PERIOD}): {last['atr']:.2f}\n"
-        f"Recent support zone: ~{levels['support']:.2f}\n"
-        f"Recent resistance zone: ~{levels['resistance']:.2f}"
+        f"MACD: {last['macd']:.2f} | signal: {last['macd_signal']:.2f} | histogram: {last['macd_hist']:.2f}; "
+        f"MACD is {signal_relation} signal and {zero_relation} zero\n"
+        f"Bollinger Bands: upper {last['bb_upper']:.2f} / mid {last['bb_mid']:.2f} / lower {last['bb_lower']:.2f}; "
+        f"width {last['bb_width_pct']:.2f}% (percentile {bb_percentile:.0f} of the last {config.VOLATILITY_LOOKBACK} candles)\n"
+        f"ATR({config.ATR_PERIOD}): {last['atr']:.2f} or {last['atr_pct']:.2f}% of price "
+        f"(percentile {atr_percentile:.0f} of the last {config.VOLATILITY_LOOKBACK} candles)\n"
+        f"Support: ~{levels['support']:.2f} ({levels['support_touches']} pivot touches)\n"
+        f"Resistance: ~{levels['resistance']:.2f} ({levels['resistance_touches']} pivot touches)\n"
+        f"Level analysis lookback: {levels['lookback']} candles"
     )
