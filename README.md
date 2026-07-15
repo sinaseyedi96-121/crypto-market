@@ -117,7 +117,7 @@ That keeps the source free and correctly labelled.
 | File | Purpose |
 |---|---|
 | `config.py` | All constants — edit this first |
-| `data_fetcher.py` | Binance/CoinGecko OHLC, CoinGecko global/stablecoin/trending data, Binance Futures funding/positioning, FRED macro data, and sentiment |
+| `data_fetcher.py` | Binance/CoinGecko OHLC, CoinGecko global/stablecoin/trending data, Bybit funding/positioning, FRED macro data, and sentiment |
 | `indicators.py` | RSI/EMA/MACD/Bollinger/ATR/rolling correlation, computed manually with pandas (not `pandas_ta`, which currently breaks on numpy ≥2.0) |
 | `chart_generator.py` | Renders every chart via `mplfinance`/`matplotlib` — candlesticks, rankings, scoreboards, and trend lines |
 | `narrative_generator.py` | DeepSeek calls for each post's write-up + the follow-up template |

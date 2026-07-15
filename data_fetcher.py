@@ -11,7 +11,10 @@ import pandas as pd
 import config
 
 BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
-BINANCE_FUTURES_BASE_URL = "https://fapi.binance.com"
+# Binance Futures (fapi.binance.com) returns HTTP 451 from US-region IPs, including
+# GitHub Actions' hosted runners, due to a regulatory geo-block on derivatives data.
+# Bybit's public v5 market-data API serves the same kind of data without that block.
+BYBIT_BASE_URL = "https://api.bybit.com"
 
 
 def fetch_klines(symbol: str, interval: str, limit: int) -> pd.DataFrame:
@@ -182,26 +185,33 @@ def fetch_trending_coins(limit: int = config.TRENDING_COINS_LIMIT) -> list[dict]
 def fetch_funding_rate(ticker: str) -> float:
     """Latest perpetual funding rate as a percentage."""
     resp = requests.get(
-        f"{BINANCE_FUTURES_BASE_URL}/fapi/v1/premiumIndex",
-        params={"symbol": f"{ticker}USDT"},
+        f"{BYBIT_BASE_URL}/v5/market/funding/history",
+        params={"category": "linear", "symbol": f"{ticker}USDT", "limit": 1},
         timeout=15,
     )
     resp.raise_for_status()
-    return float(resp.json()["lastFundingRate"]) * 100
+    rows = resp.json().get("result", {}).get("list", [])
+    if not rows:
+        raise ValueError(f"Bybit returned no funding rate for {ticker}")
+    return float(rows[0]["fundingRate"]) * 100
 
 
 def fetch_long_short_ratio(ticker: str) -> float:
-    """Latest daily global long/short account ratio (>1 means more long accounts)."""
+    """Latest daily buy/sell account ratio (>1 means more long-leaning accounts)."""
     resp = requests.get(
-        f"{BINANCE_FUTURES_BASE_URL}/futures/data/globalLongShortAccountRatio",
-        params={"symbol": f"{ticker}USDT", "period": "1d", "limit": 1},
+        f"{BYBIT_BASE_URL}/v5/market/account-ratio",
+        params={"category": "linear", "symbol": f"{ticker}USDT", "period": "1d", "limit": 1},
         timeout=15,
     )
     resp.raise_for_status()
-    rows = resp.json()
+    rows = resp.json().get("result", {}).get("list", [])
     if not rows:
-        raise ValueError(f"Binance returned no long/short ratio for {ticker}")
-    return float(rows[0]["longShortRatio"])
+        raise ValueError(f"Bybit returned no long/short ratio for {ticker}")
+    buy_ratio = float(rows[0]["buyRatio"])
+    sell_ratio = float(rows[0]["sellRatio"])
+    if sell_ratio <= 0:
+        raise ValueError(f"Bybit returned an invalid sell ratio for {ticker}")
+    return buy_ratio / sell_ratio
 
 
 def fetch_fred_series(series_id: str, lookback: int = config.MACRO_LOOKBACK) -> pd.Series:

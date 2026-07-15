@@ -485,7 +485,7 @@ def generate_pulse_chart(funding_rows: list[dict], long_short_rows: list[dict]) 
     fig.text(0.10, 0.845, "PERPETUAL FUNDING AND POSITIONING ACROSS MAJORS",
              color=MUTED, fontsize=10, fontweight="bold")
     fig.text(0.93, 0.90, "DAILY PULSE", color=EMA_FAST, fontsize=10, fontweight="bold", ha="right")
-    fig.text(0.93, 0.845, "SOURCE  ·  BINANCE FUTURES", color=MUTED, fontsize=9, ha="right")
+    fig.text(0.93, 0.845, "SOURCE  ·  BYBIT", color=MUTED, fontsize=9, ha="right")
     fig.savefig(out_path, dpi=config.CHART_DPI, facecolor=BACKGROUND, bbox_inches="tight")
     plt.close(fig)
     return out_path

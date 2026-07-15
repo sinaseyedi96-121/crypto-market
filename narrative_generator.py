@@ -331,7 +331,7 @@ def generate_daily_pulse(funding_rows: list[dict], long_short_rows: list[dict],
             "Trending coins on CoinGecko right now: "
             + ", ".join(f"{item['symbol']} ({item['name']})" for item in trending)
         )
-    context_lines.append("Source: Binance Futures for funding/positioning; CoinGecko for trending coins")
+    context_lines.append("Source: Bybit for funding/positioning; CoinGecko for trending coins")
     context = "\n".join(context_lines)
 
     avg_funding = sum(row["funding_rate"] for row in funding_rows) / len(funding_rows)
@@ -351,7 +351,7 @@ def generate_daily_pulse(funding_rows: list[dict], long_short_rows: list[dict],
     if trending:
         names = ", ".join(f"{item['symbol']}" for item in trending)
         fallback_lines.append(f"🔎 Trending on CoinGecko: {names}")
-    fallback_lines.append("🕒 Perpetual futures snapshot · Binance Futures + CoinGecko")
+    fallback_lines.append("🕒 Perpetual futures snapshot · Bybit + CoinGecko")
     return _complete(DAILY_PULSE_PROMPT, context, headline, "\n\n".join(fallback_lines))
 
 
