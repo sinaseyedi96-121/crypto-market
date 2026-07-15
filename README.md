@@ -22,22 +22,15 @@ broad U.S. dollar index, derivatives positioning, and crypto-wide liquidity.
 - If price later breaks a zone flagged in an earlier post, a factual
   follow-up reply is posted under that original message
 
-## What it deliberately does NOT post
+## Goals
 
-No entry price, take-profit, or stop-loss, and no "signal hit" tracking.
-
-Reasoning: publishing specific trade levels to the public, with a mechanism
-that shows when they "worked," is what actually defines an investment
-recommendation / signal service under EU rules (MiFID II; CONSOB in Italy
-specifically) — regardless of an "educational only" disclaimer attached to
-it. It's also the exact pattern used by non-legitimate signal sellers to
-manufacture a track record. The disclaimer alone doesn't change that.
+All goal of these posts are educational only, and not financial advice.
 
 What you get instead is the same underlying analysis (support/resistance
 zones, indicators, real charts) framed as descriptive commentary rather than
 instructions — genuinely useful, without the regulatory and credibility-fraud
 risk. If you want to revisit this later, worth a proper conversation with
-someone who knows Italian/EU financial-services regulation first.
+someone who knows financial-services regulation first.
 
 ## Setup
 
