@@ -54,9 +54,10 @@ someone who knows Italian/EU financial-services regulation first.
    Market Update" → "Run workflow". Select one slot first; use `all` only when
    you intentionally want all three publications.
 
-7. The workflow then publishes automatically (`.github/workflows/post_update.yml`):
-   - 06:15 UTC daily — market map
-   - 12:00 UTC daily — rotating two-asset deep dive
+7. The workflow then publishes automatically (`.github/workflows/post_update.yml`),
+   spaced roughly 8 hours apart so the channel stays active across the day:
+   - 04:15 UTC daily — market map
+   - 12:15 UTC daily — rotating two-asset deep dive
    - 20:15 and 21:15 UTC weekdays — daylight-safe macro checks; only the run
      after 16:10 New York time can publish, and the second is deduplicated
    - Every four hours at :10 — a silent confirmed-candle scan. It publishes
