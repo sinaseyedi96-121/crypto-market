@@ -65,6 +65,20 @@ class ClosedCandleTests(unittest.TestCase):
         self.assertEqual(result.iloc[-1]["High"], 105)
 
 
+class DataFetcherTests(unittest.TestCase):
+    def test_fear_greed_payload_parses_oldest_to_newest(self):
+        payload = {
+            "data": [
+                {"value": "25", "value_classification": "Extreme Fear", "timestamp": "1784073600"},
+                {"value": "22", "value_classification": "Extreme Fear", "timestamp": "1783987200"},
+            ]
+        }
+        series = data_fetcher._parse_fear_greed_payload(payload)
+        self.assertEqual(len(series), 2)
+        self.assertTrue(series.index.is_monotonic_increasing)
+        self.assertEqual(series.iloc[-1], 25)
+
+
 class IndicatorTests(unittest.TestCase):
     def setUp(self):
         self.frame = synthetic_market()
@@ -83,6 +97,27 @@ class IndicatorTests(unittest.TestCase):
         self.assertIn("percentile", summary)
         self.assertIn("pivot touches", summary)
         self.assertIn("MACD is", summary)
+
+    def test_rolling_correlation_detects_direction(self):
+        dates = pd.date_range("2026-01-01", periods=60, freq="D")
+        rng = np.random.default_rng(42)
+        returns = rng.normal(0.01, 0.02, 59)
+        base = pd.Series(100 * np.cumprod(np.concatenate([[1], 1 + returns])), index=dates)
+        # Scaling a series leaves its % returns unchanged, so this is perfectly positively correlated.
+        positively_correlated = base * 2 + 5
+        # Sign-flipped returns, by construction, are perfectly negatively correlated.
+        negatively_correlated = pd.Series(100 * np.cumprod(np.concatenate([[1], 1 - returns])), index=dates)
+
+        positive = indicators.rolling_correlation(base, positively_correlated, window=30)
+        negative = indicators.rolling_correlation(base, negatively_correlated, window=30)
+
+        self.assertGreater(positive, 0.9)
+        self.assertLess(negative, -0.9)
+
+    def test_rolling_correlation_none_when_not_enough_overlap(self):
+        dates = pd.date_range("2026-01-01", periods=3, freq="D")
+        series = pd.Series([1, 2, 3], index=dates)
+        self.assertIsNone(indicators.rolling_correlation(series, series, window=30))
 
 
 class SchedulingTests(unittest.TestCase):
@@ -107,6 +142,21 @@ class SchedulingTests(unittest.TestCase):
             "trend": "bullish: example",
         }
         self.assertIsNone(main._technical_event(previous, 105, "bullish: unchanged"))
+
+    def test_cron_schedule_maps_to_expected_modes(self):
+        expected = {
+            "10 */4 * * *": "alerts",
+            "15 4 * * *": "market_map",
+            "15 8 * * *": "daily_pulse",
+            "15 12 * * *": "deep_dive",
+            "15 16 * * 0": "weekly_digest",
+            "15 20 * * 1-5": "macro_close",
+            "15 21 * * 1-5": "macro_close",
+        }
+        self.assertEqual(main.CRON_MODE_MAP, expected)
+        for cron, mode in expected.items():
+            with patch.dict(os.environ, {"CRON_SCHEDULE": cron}):
+                self.assertEqual(main._automatic_mode(), mode)
 
 
 class NarrativeTests(unittest.TestCase):
@@ -139,6 +189,38 @@ class NarrativeTests(unittest.TestCase):
         self.assertTrue(result.startswith("🚨 ATTENTION-GRABBING TITLE"))
         self.assertIn("📊 Clear factual fallback", result)
         self.assertTrue(result.endswith(config.DISCLAIMER))
+
+    def test_daily_pulse_falls_back_without_network(self):
+        funding_rows = [{"ticker": "BTC", "funding_rate": 0.012}, {"ticker": "ETH", "funding_rate": -0.004}]
+        long_short_rows = [{"ticker": "BTC", "long_short_ratio": 1.21}, {"ticker": "ETH", "long_short_ratio": 0.88}]
+        trending = [{"name": "Some Coin", "symbol": "SC", "market_cap_rank": 120, "change_24h": 12.0}]
+        with patch.object(narrative_generator, "_client", side_effect=RuntimeError("no network in tests")):
+            result = narrative_generator.generate_daily_pulse(funding_rows, long_short_rows, trending)
+        self.assertIn("BTC funding", result)
+        self.assertTrue(result.endswith(config.DISCLAIMER))
+
+    def test_weekly_digest_falls_back_without_network(self):
+        weekly_rows = [
+            {"ticker": ticker, "price": 100 + i, "change_7d": i - 5}
+            for i, ticker in enumerate(("BTC", "ETH", "BNB", "XRP", "SOL", "TRX", "HYPE", "DOGE", "LEO", "ZEC"))
+        ]
+        scoreboard_rows = [
+            {"ticker": row["ticker"], "rsi": 40 + i * 4, "atr_pct": 1 + i * 0.3}
+            for i, row in enumerate(weekly_rows)
+        ]
+        dates = pd.date_range("2026-01-01", periods=7, freq="D")
+        dominance_history = pd.Series(np.linspace(55, 57, 7), index=dates)
+        feargreed_history = pd.Series(np.linspace(30, 45, 7), index=dates)
+        total_mcap_history = pd.Series(np.linspace(2.1e12, 2.2e12, 7), index=dates)
+        stablecoin_history = pd.Series(np.linspace(1.6e11, 1.62e11, 7), index=dates)
+        with patch.object(narrative_generator, "_client", side_effect=RuntimeError("no network in tests")):
+            result = narrative_generator.generate_weekly_digest(
+                weekly_rows, scoreboard_rows, dominance_history, feargreed_history,
+                total_mcap_history, stablecoin_history,
+            )
+        self.assertIn("WEEKLY DIGEST", result)
+        self.assertTrue(result.endswith(config.DISCLAIMER))
+
 
 class ChartTests(unittest.TestCase):
     def test_technical_headline_describes_structure(self):
@@ -178,7 +260,7 @@ class ChartTests(unittest.TestCase):
 
     def test_market_map_and_macro_charts_render(self):
         snapshot = [
-            {"ticker": ticker, "price": 100 + index, "change_24h": index - 5}
+            {"ticker": ticker, "price": 100 + index, "change_24h": index - 5, "change_7d": index - 5}
             for index, ticker in enumerate(("BTC", "ETH", "BNB", "XRP", "SOL", "TRX", "HYPE", "DOGE", "LEO", "ZEC"))
         ]
         dates = pd.date_range("2026-01-01", periods=30, freq="B")
@@ -187,13 +269,69 @@ class ChartTests(unittest.TestCase):
             "dollar": pd.Series(np.linspace(120, 118, 30), index=dates),
             "btc_dominance": 57.25,
         }
+        macro_extended = {
+            **macro,
+            "vix": 18.4,
+            "yield_10y": 4.2,
+            "yield_2y": 3.9,
+            "btc_sp_corr": 0.35,
+            "btc_dollar_corr": -0.22,
+        }
         with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
             market_path = chart_generator.generate_market_map_chart(snapshot)
+            weekly_path = chart_generator.generate_weekly_recap_chart(snapshot)
             macro_path = chart_generator.generate_macro_chart(macro)
+            macro_extended_path = chart_generator.generate_macro_chart(macro_extended)
             market_image = mpimg.imread(market_path)
+            weekly_image = mpimg.imread(weekly_path)
             macro_image = mpimg.imread(macro_path)
+            macro_extended_image = mpimg.imread(macro_extended_path)
         self.assertGreater(market_image.shape[1] / market_image.shape[0], 1.4)
+        self.assertGreater(weekly_image.shape[1] / weekly_image.shape[0], 1.4)
         self.assertGreater(macro_image.shape[1] / macro_image.shape[0], 1.4)
+        self.assertGreater(macro_extended_image.shape[1] / macro_extended_image.shape[0], 1.4)
+
+    def test_technical_scoreboard_chart_renders(self):
+        rows = [
+            {"ticker": ticker, "rsi": rsi, "atr_pct": atr}
+            for ticker, rsi, atr in zip(
+                ("BTC", "ETH", "BNB", "XRP", "SOL", "TRX", "HYPE", "DOGE", "LEO", "ZEC"),
+                (82, 74, 65, 55, 45, 35, 25, 18, 60, 50),
+                (1.1, 2.3, 0.8, 3.4, 1.9, 0.5, 4.1, 2.0, 1.2, 0.9),
+            )
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
+            path = chart_generator.generate_technical_scoreboard_chart(rows)
+            image = mpimg.imread(path)
+        self.assertGreater(image.shape[1] / image.shape[0], 1.2)
+
+    def test_market_structure_and_liquidity_charts_render(self):
+        dates = pd.date_range("2026-01-01", periods=14, freq="D")
+        dominance_history = pd.Series(np.linspace(55, 58, 14), index=dates)
+        feargreed_history = pd.Series(np.linspace(30, 60, 30), index=pd.date_range("2026-01-01", periods=30, freq="D"))
+        total_mcap_history = pd.Series(np.linspace(2.1e12, 2.3e12, 14), index=dates)
+        stablecoin_history = pd.Series(np.linspace(1.6e11, 1.65e11, 14), index=dates)
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
+            structure_path = chart_generator.generate_market_structure_chart(dominance_history, feargreed_history)
+            liquidity_path = chart_generator.generate_liquidity_chart(total_mcap_history, stablecoin_history)
+            structure_image = mpimg.imread(structure_path)
+            liquidity_image = mpimg.imread(liquidity_path)
+        self.assertGreater(structure_image.shape[1] / structure_image.shape[0], 1.4)
+        self.assertGreater(liquidity_image.shape[1] / liquidity_image.shape[0], 1.4)
+
+    def test_pulse_chart_renders(self):
+        funding_rows = [
+            {"ticker": ticker, "funding_rate": rate}
+            for ticker, rate in zip(("BTC", "ETH", "SOL"), (0.012, -0.004, 0.021))
+        ]
+        long_short_rows = [
+            {"ticker": ticker, "long_short_ratio": ratio}
+            for ticker, ratio in zip(("BTC", "ETH", "SOL"), (1.21, 0.88, 1.05))
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
+            path = chart_generator.generate_pulse_chart(funding_rows, long_short_rows)
+            image = mpimg.imread(path)
+        self.assertGreater(image.shape[1] / image.shape[0], 1.2)
 
 
 if __name__ == "__main__":

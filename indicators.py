@@ -161,6 +161,22 @@ def find_key_levels(df: pd.DataFrame, lookback=config.LEVEL_LOOKBACK) -> dict:
     }
 
 
+def rolling_correlation(price_a: pd.Series, price_b: pd.Series, window: int) -> float | None:
+    """Trailing daily-return correlation between two price series aligned by date.
+
+    Returns None when there isn't enough overlapping history to be meaningful.
+    """
+    a = price_a.copy()
+    a.index = pd.to_datetime(a.index).normalize()
+    b = price_b.copy()
+    b.index = pd.to_datetime(b.index).normalize()
+    combined = pd.concat([a.pct_change(), b.pct_change()], axis=1, join="inner").dropna()
+    tail = combined.tail(window)
+    if len(tail) < max(5, window // 3):
+        return None
+    return float(tail.iloc[:, 0].corr(tail.iloc[:, 1]))
+
+
 def _percentile_rank(series: pd.Series, lookback: int) -> float:
     values = series.dropna().tail(lookback)
     if values.empty:

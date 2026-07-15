@@ -33,6 +33,13 @@ DEEP_DIVE_ROTATION = [
 DEEP_DIVE_TIMEFRAME = "1d"
 CANDLE_LIMIT = 300                         # enough history for indicators and long-term levels
 
+# Tickers checked for funding rate / long-short ratio in the daily pulse post.
+PULSE_ASSETS = ["BTC", "ETH", "SOL"]
+TRENDING_COINS_LIMIT = 5
+
+# Day of week (Monday=0 .. Sunday=6) the weekly digest is allowed to publish.
+WEEKLY_DIGEST_WEEKDAY = 6
+
 # ---- Indicators ----
 RSI_PERIOD = 14
 EMA_FAST = 20
@@ -77,6 +84,13 @@ FEAR_GREED_URL = "https://api.alternative.me/fng/"
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 MACRO_LOOKBACK = 140
+FRED_VIX_SERIES = "VIXCLS"
+FRED_10Y_SERIES = "DGS10"
+FRED_2Y_SERIES = "DGS2"
+CORRELATION_WINDOW = 30                    # trading days used for BTC vs macro rolling correlation
+
+# ---- Weekly digest history (built up daily, no paid historical API needed) ----
+DAILY_SNAPSHOT_HISTORY_DAYS = 90
 
 # ---- Paths ----
 CHART_DIR = "charts"

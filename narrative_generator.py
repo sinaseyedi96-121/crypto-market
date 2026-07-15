@@ -53,7 +53,21 @@ MACRO_PROMPT = """You write concise educational macro context for a crypto audie
 
 Write 6 or 7 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
 
-Cover the S&P 500, the Federal Reserve broad U.S. dollar index, BTC dominance, and the relationship between risk assets, dollar strength, and crypto without claiming causation. Clearly call the dollar series the Fed broad dollar index, not DXY. Use only supplied facts. Never give trade instructions or predict prices. Finish with data-source dates. Keep the response below 850 characters.
+Cover the S&P 500, the Federal Reserve broad U.S. dollar index, BTC dominance, and the relationship between risk assets, dollar strength, and crypto without claiming causation. Clearly call the dollar series the Fed broad dollar index, not DXY. When supplied, also mention the VIX, the 10-year minus 2-year Treasury yield spread, and BTC's rolling correlation with the S&P 500 and the dollar index, purely as descriptive facts. Use only supplied facts. Never give trade instructions or predict prices. Finish with data-source dates. Keep the response below 850 characters.
+"""
+
+DAILY_PULSE_PROMPT = """You write a concise daily derivatives and sentiment pulse for a crypto Telegram audience.
+
+Write 6 or 7 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
+
+Cover perpetual funding rates and what a positive or negative rate implies about leveraged positioning, the long/short account ratio, and any notable trending coins supplied. Use only supplied facts. Never give trade instructions, never predict prices, and do not tell readers to open or close positions. Keep the response below 850 characters.
+"""
+
+WEEKLY_DIGEST_PROMPT = """You write a concise weekly crypto market digest for Telegram, covering a chart album of four images: a 7-day performance ranking, a technical scoreboard (RSI and volatility), a market-structure chart (BTC dominance and Fear & Greed over time), and a liquidity chart (total and stablecoin market cap over time).
+
+Write 8 or 9 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
+
+Cover the week's strongest and weakest performers, any RSI extremes (overbought or oversold) and the most volatile asset, how BTC dominance moved over the window, how Fear & Greed moved over the window, and how total and stablecoin market cap moved over the window. Use only supplied facts. Never give trade instructions or predict prices. Keep the response below 850 characters.
 """
 
 
@@ -247,18 +261,36 @@ def _change(series, periods: int) -> float:
 def generate_macro(macro: dict) -> str:
     sp500 = macro["sp500"]
     dollar = macro["dollar"]
-    context = (
-        f"S&P 500 latest close: {sp500.iloc[-1]:.2f}\n"
-        f"S&P 500 1-session change: {_change(sp500, 1):+.2f}%\n"
-        f"S&P 500 5-session change: {_change(sp500, 5):+.2f}%\n"
-        f"S&P 500 observation date: {sp500.index[-1].date()}\n"
-        f"Fed broad U.S. dollar index latest: {dollar.iloc[-1]:.2f}\n"
-        f"Dollar index 1-session change: {_change(dollar, 1):+.2f}%\n"
-        f"Dollar index 5-session change: {_change(dollar, 5):+.2f}%\n"
-        f"Dollar observation date: {dollar.index[-1].date()}\n"
-        f"Current BTC dominance: {macro['btc_dominance']:.2f}%\n"
-        "Sources: FRED for S&P 500 and broad dollar index; CoinGecko for BTC dominance"
-    )
+    context_lines = [
+        f"S&P 500 latest close: {sp500.iloc[-1]:.2f}",
+        f"S&P 500 1-session change: {_change(sp500, 1):+.2f}%",
+        f"S&P 500 5-session change: {_change(sp500, 5):+.2f}%",
+        f"S&P 500 observation date: {sp500.index[-1].date()}",
+        f"Fed broad U.S. dollar index latest: {dollar.iloc[-1]:.2f}",
+        f"Dollar index 1-session change: {_change(dollar, 1):+.2f}%",
+        f"Dollar index 5-session change: {_change(dollar, 5):+.2f}%",
+        f"Dollar observation date: {dollar.index[-1].date()}",
+        f"Current BTC dominance: {macro['btc_dominance']:.2f}%",
+    ]
+    if macro.get("vix") is not None:
+        context_lines.append(f"VIX (equity volatility index): {macro['vix']:.2f}")
+    if macro.get("yield_10y") is not None and macro.get("yield_2y") is not None:
+        spread = macro["yield_10y"] - macro["yield_2y"]
+        context_lines.append(
+            f"10-year Treasury yield: {macro['yield_10y']:.2f}% · 2-year: {macro['yield_2y']:.2f}% "
+            f"· 10Y-2Y spread: {spread:+.2f} percentage points"
+        )
+    if macro.get("btc_sp_corr") is not None:
+        context_lines.append(
+            f"BTC vs S&P 500 rolling {config.CORRELATION_WINDOW}-day return correlation: {macro['btc_sp_corr']:+.2f}"
+        )
+    if macro.get("btc_dollar_corr") is not None:
+        context_lines.append(
+            f"BTC vs Fed broad dollar index rolling {config.CORRELATION_WINDOW}-day return correlation: {macro['btc_dollar_corr']:+.2f}"
+        )
+    context_lines.append("Sources: FRED for S&P 500, broad dollar index, VIX, and Treasury yields; CoinGecko for BTC dominance")
+    context = "\n".join(context_lines)
+
     sp_1d = _change(sp500, 1)
     sp_5d = _change(sp500, 5)
     dollar_1d = _change(dollar, 1)
@@ -269,15 +301,106 @@ def generate_macro(macro: dict) -> str:
         headline = "⚠️ DOLLAR PRESSURE HITS RISK ASSETS"
     else:
         headline = "🔍 WALL STREET AND THE DOLLAR DIVERGE"
-    fallback = "\n\n".join([
+    fallback_lines = [
         f"📈 S&P 500 closed at {sp500.iloc[-1]:,.2f} · 1D {sp_1d:+.2f}% · 5D {sp_5d:+.2f}%",
         f"💵 Fed broad dollar index is {dollar.iloc[-1]:,.2f} · 1D {dollar_1d:+.2f}% · 5D {dollar_5d:+.2f}%",
         f"₿ Bitcoin dominance stands at {macro['btc_dominance']:.2f}%",
-        "🔄 Stocks and the dollar are showing the current balance between risk appetite and defensiveness",
-        "👀 Dollar strength can pressure global liquidity, while a softer dollar can ease that pressure",
-        f"🕒 S&P data: {sp500.index[-1].date()} · dollar data: {dollar.index[-1].date()} · FRED + CoinGecko",
+    ]
+    if macro.get("vix") is not None:
+        fallback_lines.append(f"😬 VIX is at {macro['vix']:.2f}")
+    if macro.get("yield_10y") is not None and macro.get("yield_2y") is not None:
+        spread = macro["yield_10y"] - macro["yield_2y"]
+        fallback_lines.append(f"🏦 10Y-2Y Treasury spread is {spread:+.2f}pp")
+    if macro.get("btc_sp_corr") is not None:
+        fallback_lines.append(f"🔗 BTC-S&P 500 {config.CORRELATION_WINDOW}D correlation is {macro['btc_sp_corr']:+.2f}")
+    fallback_lines.append("🔄 Stocks and the dollar are showing the current balance between risk appetite and defensiveness")
+    fallback_lines.append(f"🕒 S&P data: {sp500.index[-1].date()} · dollar data: {dollar.index[-1].date()} · FRED + CoinGecko")
+    return _complete(MACRO_PROMPT, context, headline, "\n\n".join(fallback_lines))
+
+
+def generate_daily_pulse(funding_rows: list[dict], long_short_rows: list[dict],
+                          trending: list[dict]) -> str:
+    context_lines = [
+        f"{row['ticker']} funding rate: {row['funding_rate']:+.4f}%" for row in funding_rows
+    ] + [
+        f"{row['ticker']} long/short account ratio: {row['long_short_ratio']:.2f}"
+        for row in long_short_rows
+    ]
+    if trending:
+        context_lines.append(
+            "Trending coins on CoinGecko right now: "
+            + ", ".join(f"{item['symbol']} ({item['name']})" for item in trending)
+        )
+    context_lines.append("Source: Binance Futures for funding/positioning; CoinGecko for trending coins")
+    context = "\n".join(context_lines)
+
+    avg_funding = sum(row["funding_rate"] for row in funding_rows) / len(funding_rows)
+    if avg_funding > 0.01:
+        headline = "🔥 LEVERAGED LONGS ARE PAYING UP"
+    elif avg_funding < -0.01:
+        headline = "🧊 SHORTS ARE PAYING TO STAY SHORT"
+    else:
+        headline = "⚖️ DERIVATIVES MARKET SITS NEAR BALANCE"
+
+    fallback_lines = [
+        f"💸 {row['ticker']} funding {row['funding_rate']:+.4f}%" for row in funding_rows
+    ] + [
+        f"📐 {row['ticker']} long/short ratio {row['long_short_ratio']:.2f}"
+        for row in long_short_rows
+    ]
+    if trending:
+        names = ", ".join(f"{item['symbol']}" for item in trending)
+        fallback_lines.append(f"🔎 Trending on CoinGecko: {names}")
+    fallback_lines.append("🕒 Perpetual futures snapshot · Binance Futures + CoinGecko")
+    return _complete(DAILY_PULSE_PROMPT, context, headline, "\n\n".join(fallback_lines))
+
+
+def generate_weekly_digest(weekly_rows: list[dict], scoreboard_rows: list[dict],
+                            dominance_history, feargreed_history,
+                            total_mcap_history, stablecoin_history) -> str:
+    strongest = max(weekly_rows, key=lambda row: row["change_7d"])
+    weakest = min(weekly_rows, key=lambda row: row["change_7d"])
+    most_overbought = max(scoreboard_rows, key=lambda row: row["rsi"])
+    most_oversold = min(scoreboard_rows, key=lambda row: row["rsi"])
+    most_volatile = max(scoreboard_rows, key=lambda row: row["atr_pct"])
+    dominance_change = float(dominance_history.iloc[-1] - dominance_history.iloc[0])
+    feargreed_change = float(feargreed_history.iloc[-1] - feargreed_history.iloc[0])
+    mcap_change_pct = _change(total_mcap_history, len(total_mcap_history) - 1)
+    stablecoin_change_pct = _change(stablecoin_history, len(stablecoin_history) - 1)
+
+    context = "\n".join([
+        f"Strongest 7-day performer: {strongest['ticker']} {strongest['change_7d']:+.2f}%",
+        f"Weakest 7-day performer: {weakest['ticker']} {weakest['change_7d']:+.2f}%",
+        f"Most overbought (highest RSI): {most_overbought['ticker']} RSI {most_overbought['rsi']:.1f}",
+        f"Most oversold (lowest RSI): {most_oversold['ticker']} RSI {most_oversold['rsi']:.1f}",
+        f"Most volatile (highest ATR%): {most_volatile['ticker']} {most_volatile['atr_pct']:.2f}%",
+        f"BTC dominance moved {dominance_change:+.2f} percentage points over the window, now {dominance_history.iloc[-1]:.2f}%",
+        f"Fear & Greed moved {feargreed_change:+.0f} points over the window, now {feargreed_history.iloc[-1]:.0f}/100",
+        f"Total crypto market cap changed {mcap_change_pct:+.2f}% over the window",
+        f"Stablecoin market cap changed {stablecoin_change_pct:+.2f}% over the window",
+        "Sources: CoinGecko for prices, dominance, and market caps; Binance for RSI/ATR; alternative.me for Fear & Greed",
     ])
-    return _complete(MACRO_PROMPT, context, headline, fallback)
+
+    advancing = sum(row["change_7d"] > 0 for row in weekly_rows)
+    if advancing >= 8:
+        headline = "📅 WEEKLY DIGEST: BROAD STRENGTH ACROSS THE BOARD"
+    elif advancing <= 2:
+        headline = "📅 WEEKLY DIGEST: A ROUGH WEEK FOR MOST ASSETS"
+    else:
+        headline = "📅 WEEKLY DIGEST: A MIXED WEEK OF ROTATION"
+
+    fallback_lines = [
+        f"🚀 Strongest 7D: {strongest['ticker']} {strongest['change_7d']:+.2f}%",
+        f"🔻 Weakest 7D: {weakest['ticker']} {weakest['change_7d']:+.2f}%",
+        f"📈 Most overbought: {most_overbought['ticker']} RSI {most_overbought['rsi']:.1f}",
+        f"📉 Most oversold: {most_oversold['ticker']} RSI {most_oversold['rsi']:.1f}",
+        f"⚡ Most volatile: {most_volatile['ticker']} ATR {most_volatile['atr_pct']:.2f}%",
+        f"₿ BTC dominance {dominance_change:+.2f}pp over the window to {dominance_history.iloc[-1]:.2f}%",
+        f"🧭 Fear & Greed {feargreed_change:+.0f} points over the window to {feargreed_history.iloc[-1]:.0f}/100",
+        f"💧 Total market cap {mcap_change_pct:+.2f}% · stablecoin market cap {stablecoin_change_pct:+.2f}%",
+        "🕒 Weekly digest · Binance, CoinGecko, alternative.me",
+    ]
+    return _complete(WEEKLY_DIGEST_PROMPT, context, headline, "\n\n".join(fallback_lines))
 
 
 def generate_followup(symbol: str, timeframe: str, message: str) -> str:

@@ -4,7 +4,9 @@ on:
   schedule:
     - cron: '10 */4 * * *'     # silent confirmed-4h scan; max two event alerts/day
     - cron: '15 4 * * *'       # morning market map (~06:15 Rome in summer) — 8h before macro close
+    - cron: '15 8 * * *'       # daily derivatives pulse (~10:15 Rome) — funding/long-short/trending
     - cron: '15 12 * * *'      # rotating two-asset deep dive (~14:15 Rome) — 8h after market map, 8h before macro close
+    - cron: '15 16 * * 0'      # Sunday weekly digest (~18:15 Rome) — fills the weekend gap
     - cron: '15 20 * * 1-5'    # 16:15 New York while US daylight time is active
     - cron: '15 21 * * 1-5'    # 16:15 New York during US standard time
   workflow_dispatch:
@@ -20,6 +22,8 @@ on:
           - deep_dive
           - macro_close
           - alerts
+          - daily_pulse
+          - weekly_digest
       force:
         description: Republish even if today's slot is already recorded
         type: boolean

@@ -11,6 +11,7 @@ import pandas as pd
 import config
 
 BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
+BINANCE_FUTURES_BASE_URL = "https://fapi.binance.com"
 
 
 def fetch_klines(symbol: str, interval: str, limit: int) -> pd.DataFrame:
@@ -111,14 +112,14 @@ def _aggregate_coingecko_prices(raw_prices: list, interval: str,
 
 
 def fetch_market_snapshot(assets: list[dict]) -> list[dict]:
-    """Fetch all ten assets in one CoinGecko request."""
+    """Fetch all ten assets, with both 24h and 7d change, in one CoinGecko request."""
     ids = ",".join(asset["coingecko_id"] for asset in assets)
     rows = _coingecko_get(
         "/coins/markets",
         {
             "vs_currency": "usd",
             "ids": ids,
-            "price_change_percentage": "24h",
+            "price_change_percentage": "24h,7d",
             "sparkline": "false",
         },
     ).json()
@@ -131,7 +132,8 @@ def fetch_market_snapshot(assets: list[dict]) -> list[dict]:
         snapshot.append({
             **asset,
             "price": float(row["current_price"]),
-            "change_24h": float(row.get("price_change_percentage_24h") or 0),
+            "change_24h": float(row.get("price_change_percentage_24h_in_currency") or 0),
+            "change_7d": float(row.get("price_change_percentage_7d_in_currency") or 0),
             "market_cap": float(row.get("market_cap") or 0),
             "volume_24h": float(row.get("total_volume") or 0),
         })
@@ -142,9 +144,64 @@ def fetch_market_snapshot(assets: list[dict]) -> list[dict]:
     return snapshot
 
 
-def fetch_btc_dominance() -> float:
+def fetch_global_snapshot() -> dict:
+    """Total crypto market cap and BTC dominance in one CoinGecko request."""
     data = _coingecko_get("/global").json()["data"]
-    return float(data["market_cap_percentage"]["btc"])
+    return {
+        "btc_dominance": float(data["market_cap_percentage"]["btc"]),
+        "total_market_cap_usd": float(data["total_market_cap"]["usd"]),
+    }
+
+
+def fetch_stablecoin_market_cap() -> float:
+    """Combined market cap of CoinGecko's 'stablecoins' category — a rough
+    proxy for capital sitting on the sidelines rather than deployed."""
+    rows = _coingecko_get(
+        "/coins/markets",
+        {"vs_currency": "usd", "category": "stablecoins", "per_page": 250, "page": 1},
+    ).json()
+    return float(sum(row.get("market_cap") or 0 for row in rows))
+
+
+def fetch_trending_coins(limit: int = config.TRENDING_COINS_LIMIT) -> list[dict]:
+    payload = _coingecko_get("/search/trending").json()
+    trending = []
+    for entry in payload.get("coins", [])[:limit]:
+        item = entry.get("item", {})
+        data = item.get("data", {})
+        change = data.get("price_change_percentage_24h", {}).get("usd")
+        trending.append({
+            "name": item.get("name", "?"),
+            "symbol": str(item.get("symbol", "?")).upper(),
+            "market_cap_rank": item.get("market_cap_rank"),
+            "change_24h": float(change) if change is not None else None,
+        })
+    return trending
+
+
+def fetch_funding_rate(ticker: str) -> float:
+    """Latest perpetual funding rate as a percentage."""
+    resp = requests.get(
+        f"{BINANCE_FUTURES_BASE_URL}/fapi/v1/premiumIndex",
+        params={"symbol": f"{ticker}USDT"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return float(resp.json()["lastFundingRate"]) * 100
+
+
+def fetch_long_short_ratio(ticker: str) -> float:
+    """Latest daily global long/short account ratio (>1 means more long accounts)."""
+    resp = requests.get(
+        f"{BINANCE_FUTURES_BASE_URL}/futures/data/globalLongShortAccountRatio",
+        params={"symbol": f"{ticker}USDT", "period": "1d", "limit": 1},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    rows = resp.json()
+    if not rows:
+        raise ValueError(f"Binance returned no long/short ratio for {ticker}")
+    return float(rows[0]["longShortRatio"])
 
 
 def fetch_fred_series(series_id: str, lookback: int = config.MACRO_LOOKBACK) -> pd.Series:
@@ -168,7 +225,7 @@ def fetch_macro_snapshot() -> dict:
     return {
         "sp500": fetch_fred_series("SP500"),
         "dollar": fetch_fred_series("DTWEXBGS"),
-        "btc_dominance": fetch_btc_dominance(),
+        "btc_dominance": fetch_global_snapshot()["btc_dominance"],
     }
 
 
@@ -204,6 +261,14 @@ def _parse_closed_klines(raw: list, now: pd.Timestamp | None = None) -> pd.DataF
     return closed
 
 
+def _parse_fear_greed_payload(payload: dict) -> pd.Series:
+    """Oldest-to-newest Fear & Greed values, indexed by date."""
+    rows = payload["data"]
+    index = [pd.to_datetime(int(row["timestamp"]), unit="s").normalize() for row in rows]
+    values = [int(row["value"]) for row in rows]
+    return pd.Series(values, index=index, name="fear_greed").sort_index()
+
+
 def fetch_fear_greed_index() -> dict | None:
     """
     Returns {"value": int, "classification": str} or None if the request fails.
@@ -219,3 +284,9 @@ def fetch_fear_greed_index() -> dict | None:
         }
     except Exception:
         return None
+
+
+def fetch_fear_greed_history(limit: int) -> pd.Series:
+    resp = requests.get(config.FEAR_GREED_URL, params={"limit": limit}, timeout=10)
+    resp.raise_for_status()
+    return _parse_fear_greed_payload(resp.json())
