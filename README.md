@@ -26,10 +26,7 @@ broad U.S. dollar index, derivatives positioning, and crypto-wide liquidity.
 
 All goal of these posts are educational only, and not financial advice.
 
-What you get instead is the same underlying analysis (support/resistance
-zones, indicators, real charts) framed as descriptive commentary rather than
-instructions — genuinely useful, without the regulatory and credibility-fraud
-risk. If you want to revisit this later, worth a proper conversation with
+If you want to enter a trading business, worth a proper conversation with
 someone who knows financial-services regulation first.
 
 ## Setup
