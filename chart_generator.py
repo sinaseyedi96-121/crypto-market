@@ -6,6 +6,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
@@ -13,6 +14,13 @@ from matplotlib.ticker import FuncFormatter
 import mplfinance as mpf
 
 import config
+
+
+FONT_DIR = os.path.join(os.path.dirname(__file__), "fonts")
+FONT_FAMILY = "PT Serif"
+for _font_file in ("PTSerif-Regular.ttf", "PTSerif-Bold.ttf"):
+    fm.fontManager.addfont(os.path.join(FONT_DIR, _font_file))
+plt.rcParams["font.family"] = FONT_FAMILY
 
 
 BACKGROUND = "#08111F"
@@ -49,7 +57,7 @@ def _style():
         rc={
             "axes.edgecolor": GRID,
             "axes.labelcolor": MUTED,
-            "font.family": "DejaVu Sans",
+            "font.family": FONT_FAMILY,
             "font.size": 10,
             "text.color": TEXT,
             "xtick.color": MUTED,
