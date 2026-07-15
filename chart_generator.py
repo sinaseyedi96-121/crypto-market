@@ -443,18 +443,18 @@ def generate_liquidity_chart(total_mcap_history, stablecoin_mcap_history) -> str
     return out_path
 
 
-def generate_pulse_chart(funding_rows: list[dict], long_short_rows: list[dict]) -> str:
-    """Perpetual funding rate and long/short account ratio for the pulse assets."""
+def generate_pulse_chart(derivatives_rows: list[dict]) -> str:
+    """Perpetual funding rate and open interest for the pulse assets."""
     os.makedirs(config.CHART_DIR, exist_ok=True)
     out_path = os.path.join(config.CHART_DIR, "daily_pulse.png")
 
-    fig, (ax_funding, ax_ls) = plt.subplots(1, 2, figsize=(12.8, 6.4), facecolor=BACKGROUND)
-    for ax in (ax_funding, ax_ls):
+    fig, (ax_funding, ax_oi) = plt.subplots(1, 2, figsize=(12.8, 6.4), facecolor=BACKGROUND)
+    for ax in (ax_funding, ax_oi):
         _clean_axes(ax)
 
-    funding_values = [row["funding_rate"] for row in funding_rows]
+    funding_values = [row["funding_rate"] for row in derivatives_rows]
     funding_colors = [UP if value >= 0 else DOWN for value in funding_values]
-    ax_funding.barh([row["ticker"] for row in funding_rows], funding_values,
+    ax_funding.barh([row["ticker"] for row in derivatives_rows], funding_values,
                     color=funding_colors, height=0.5, alpha=0.92)
     ax_funding.axvline(0, color=MUTED, linewidth=0.9, alpha=0.7)
     ax_funding.set_xlabel("FUNDING RATE %", color=MUTED, fontsize=9, fontweight="bold", labelpad=10)
@@ -463,29 +463,29 @@ def generate_pulse_chart(funding_rows: list[dict], long_short_rows: list[dict]) 
     funding_high = max(max(funding_values), 0)
     funding_span = max(funding_high - funding_low, 0.01)
     ax_funding.set_xlim(funding_low - funding_span * 0.35, funding_high + funding_span * 0.35)
-    for y, row in enumerate(funding_rows):
+    for y, row in enumerate(derivatives_rows):
         value = row["funding_rate"]
-        ax_funding.text(value + (funding_pad if value >= 0 else -funding_pad), y, f"{value:+.3f}%",
+        ax_funding.text(value + (funding_pad if value >= 0 else -funding_pad), y, f"{value:+.4f}%",
                         va="center", ha="left" if value >= 0 else "right",
                         color=TEXT, fontsize=9, fontweight="bold")
 
-    ls_values = [row["long_short_ratio"] for row in long_short_rows]
-    ls_colors = [UP if value >= 1 else DOWN for value in ls_values]
-    ax_ls.barh([row["ticker"] for row in long_short_rows], ls_values,
-               color=ls_colors, height=0.5, alpha=0.92)
-    ax_ls.axvline(1, color=MUTED, linewidth=0.9, alpha=0.7)
-    ax_ls.set_xlabel("LONG / SHORT ACCOUNT RATIO", color=MUTED, fontsize=9, fontweight="bold", labelpad=10)
-    ax_ls.set_xlim(0, max(ls_values) * 1.22)
-    for y, row in enumerate(long_short_rows):
-        ax_ls.text(row["long_short_ratio"] + max(ls_values) * 0.02, y, f"{row['long_short_ratio']:.2f}",
+    oi_values = [row["open_interest"] for row in derivatives_rows]
+    max_oi = max(oi_values) if oi_values else 1
+    ax_oi.barh([row["ticker"] for row in derivatives_rows], oi_values,
+               color=EMA_SLOW, height=0.5, alpha=0.92)
+    ax_oi.set_xlabel("OPEN INTEREST (USD)", color=MUTED, fontsize=9, fontweight="bold", labelpad=10)
+    ax_oi.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"${_compact_number(value)}"))
+    ax_oi.set_xlim(0, max_oi * 1.22)
+    for y, row in enumerate(derivatives_rows):
+        ax_oi.text(row["open_interest"] + max_oi * 0.02, y, f"${_compact_number(row['open_interest'])}",
                    va="center", color=TEXT, fontsize=9, fontweight="bold")
 
     fig.subplots_adjust(left=0.10, right=0.95, top=0.78, bottom=0.13, wspace=0.45)
     fig.text(0.10, 0.90, "DERIVATIVES PULSE", color=TEXT, fontsize=23, fontweight="bold")
-    fig.text(0.10, 0.845, "PERPETUAL FUNDING AND POSITIONING ACROSS MAJORS",
+    fig.text(0.10, 0.845, "PERPETUAL FUNDING AND OPEN INTEREST ACROSS MAJORS",
              color=MUTED, fontsize=10, fontweight="bold")
     fig.text(0.93, 0.90, "DAILY PULSE", color=EMA_FAST, fontsize=10, fontweight="bold", ha="right")
-    fig.text(0.93, 0.845, "SOURCE  ·  BYBIT", color=MUTED, fontsize=9, ha="right")
+    fig.text(0.93, 0.845, "SOURCE  ·  COINGECKO", color=MUTED, fontsize=9, ha="right")
     fig.savefig(out_path, dpi=config.CHART_DPI, facecolor=BACKGROUND, bbox_inches="tight")
     plt.close(fig)
     return out_path

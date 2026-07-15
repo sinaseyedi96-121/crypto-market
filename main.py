@@ -321,18 +321,8 @@ def run_daily_pulse(state: dict, chat_id: str, force: bool = False) -> None:
         print("Today's daily pulse was already posted; skipping duplicate.")
         return
 
-    funding_rows, long_short_rows = [], []
-    for ticker in config.PULSE_ASSETS:
-        try:
-            funding_rows.append({"ticker": ticker, "funding_rate": data_fetcher.fetch_funding_rate(ticker)})
-        except Exception as exc:
-            print(f"Skipping {ticker} funding rate: {exc}", file=sys.stderr)
-        try:
-            long_short_rows.append({"ticker": ticker, "long_short_ratio": data_fetcher.fetch_long_short_ratio(ticker)})
-        except Exception as exc:
-            print(f"Skipping {ticker} long/short ratio: {exc}", file=sys.stderr)
-
-    if not funding_rows or not long_short_rows:
+    derivatives_rows = data_fetcher.fetch_derivatives_snapshot(config.PULSE_ASSETS)
+    if not derivatives_rows:
         raise RuntimeError("Not enough derivatives data to publish the daily pulse")
 
     try:
@@ -341,8 +331,8 @@ def run_daily_pulse(state: dict, chat_id: str, force: bool = False) -> None:
         print(f"Trending coins fetch failed: {exc}", file=sys.stderr)
         trending = []
 
-    chart_path = chart_generator.generate_pulse_chart(funding_rows, long_short_rows)
-    caption = narrative_generator.generate_daily_pulse(funding_rows, long_short_rows, trending)
+    chart_path = chart_generator.generate_pulse_chart(derivatives_rows)
+    caption = narrative_generator.generate_daily_pulse(derivatives_rows, trending)
     _publish(chat_id, [chart_path], caption)
     _mark_slot(state, "daily_pulse")
     print("Posted daily derivatives pulse.")

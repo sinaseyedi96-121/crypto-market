@@ -191,11 +191,13 @@ class NarrativeTests(unittest.TestCase):
         self.assertTrue(result.endswith(config.DISCLAIMER))
 
     def test_daily_pulse_falls_back_without_network(self):
-        funding_rows = [{"ticker": "BTC", "funding_rate": 0.012}, {"ticker": "ETH", "funding_rate": -0.004}]
-        long_short_rows = [{"ticker": "BTC", "long_short_ratio": 1.21}, {"ticker": "ETH", "long_short_ratio": 0.88}]
+        derivatives_rows = [
+            {"ticker": "BTC", "funding_rate": 0.012, "open_interest": 6.8e9, "market": "Binance (Futures)"},
+            {"ticker": "ETH", "funding_rate": -0.004, "open_interest": 4.5e9, "market": "Binance (Futures)"},
+        ]
         trending = [{"name": "Some Coin", "symbol": "SC", "market_cap_rank": 120, "change_24h": 12.0}]
         with patch.object(narrative_generator, "_client", side_effect=RuntimeError("no network in tests")):
-            result = narrative_generator.generate_daily_pulse(funding_rows, long_short_rows, trending)
+            result = narrative_generator.generate_daily_pulse(derivatives_rows, trending)
         self.assertIn("BTC funding", result)
         self.assertTrue(result.endswith(config.DISCLAIMER))
 
@@ -320,16 +322,14 @@ class ChartTests(unittest.TestCase):
         self.assertGreater(liquidity_image.shape[1] / liquidity_image.shape[0], 1.4)
 
     def test_pulse_chart_renders(self):
-        funding_rows = [
-            {"ticker": ticker, "funding_rate": rate}
-            for ticker, rate in zip(("BTC", "ETH", "SOL"), (0.012, -0.004, 0.021))
-        ]
-        long_short_rows = [
-            {"ticker": ticker, "long_short_ratio": ratio}
-            for ticker, ratio in zip(("BTC", "ETH", "SOL"), (1.21, 0.88, 1.05))
+        derivatives_rows = [
+            {"ticker": ticker, "funding_rate": rate, "open_interest": oi, "market": "Binance (Futures)"}
+            for ticker, rate, oi in zip(
+                ("BTC", "ETH", "SOL"), (0.012, -0.004, 0.021), (6.8e9, 4.5e9, 1.2e9)
+            )
         ]
         with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
-            path = chart_generator.generate_pulse_chart(funding_rows, long_short_rows)
+            path = chart_generator.generate_pulse_chart(derivatives_rows)
             image = mpimg.imread(path)
         self.assertGreater(image.shape[1] / image.shape[0], 1.2)
 

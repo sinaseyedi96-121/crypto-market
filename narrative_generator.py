@@ -60,7 +60,7 @@ DAILY_PULSE_PROMPT = """You write a concise daily derivatives and sentiment puls
 
 Write 6 or 7 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
 
-Cover perpetual funding rates and what a positive or negative rate implies about leveraged positioning, the long/short account ratio, and any notable trending coins supplied. Use only supplied facts. Never give trade instructions, never predict prices, and do not tell readers to open or close positions. Keep the response below 850 characters.
+Cover perpetual funding rates and what a positive or negative rate implies about leveraged positioning, open interest levels, and any notable trending coins supplied. Use only supplied facts. Never give trade instructions, never predict prices, and do not tell readers to open or close positions. Keep the response below 850 characters.
 """
 
 WEEKLY_DIGEST_PROMPT = """You write a concise weekly crypto market digest for Telegram, covering a chart album of four images: a 7-day performance ranking, a technical scoreboard (RSI and volatility), a market-structure chart (BTC dominance and Fear & Greed over time), and a liquidity chart (total and stablecoin market cap over time).
@@ -318,23 +318,22 @@ def generate_macro(macro: dict) -> str:
     return _complete(MACRO_PROMPT, context, headline, "\n\n".join(fallback_lines))
 
 
-def generate_daily_pulse(funding_rows: list[dict], long_short_rows: list[dict],
-                          trending: list[dict]) -> str:
+def generate_daily_pulse(derivatives_rows: list[dict], trending: list[dict]) -> str:
     context_lines = [
-        f"{row['ticker']} funding rate: {row['funding_rate']:+.4f}%" for row in funding_rows
+        f"{row['ticker']} funding rate: {row['funding_rate']:+.4f}% (market: {row['market']})"
+        for row in derivatives_rows
     ] + [
-        f"{row['ticker']} long/short account ratio: {row['long_short_ratio']:.2f}"
-        for row in long_short_rows
+        f"{row['ticker']} open interest: ${row['open_interest']:,.0f}" for row in derivatives_rows
     ]
     if trending:
         context_lines.append(
             "Trending coins on CoinGecko right now: "
             + ", ".join(f"{item['symbol']} ({item['name']})" for item in trending)
         )
-    context_lines.append("Source: Bybit for funding/positioning; CoinGecko for trending coins")
+    context_lines.append("Source: CoinGecko derivatives aggregation for funding/open interest and trending coins")
     context = "\n".join(context_lines)
 
-    avg_funding = sum(row["funding_rate"] for row in funding_rows) / len(funding_rows)
+    avg_funding = sum(row["funding_rate"] for row in derivatives_rows) / len(derivatives_rows)
     if avg_funding > 0.01:
         headline = "🔥 LEVERAGED LONGS ARE PAYING UP"
     elif avg_funding < -0.01:
@@ -343,15 +342,15 @@ def generate_daily_pulse(funding_rows: list[dict], long_short_rows: list[dict],
         headline = "⚖️ DERIVATIVES MARKET SITS NEAR BALANCE"
 
     fallback_lines = [
-        f"💸 {row['ticker']} funding {row['funding_rate']:+.4f}%" for row in funding_rows
+        f"💸 {row['ticker']} funding {row['funding_rate']:+.4f}%" for row in derivatives_rows
     ] + [
-        f"📐 {row['ticker']} long/short ratio {row['long_short_ratio']:.2f}"
-        for row in long_short_rows
+        f"📊 {row['ticker']} open interest ${row['open_interest'] / 1_000_000:,.0f}M"
+        for row in derivatives_rows
     ]
     if trending:
         names = ", ".join(f"{item['symbol']}" for item in trending)
         fallback_lines.append(f"🔎 Trending on CoinGecko: {names}")
-    fallback_lines.append("🕒 Perpetual futures snapshot · Bybit + CoinGecko")
+    fallback_lines.append("🕒 Perpetual derivatives snapshot · CoinGecko")
     return _complete(DAILY_PULSE_PROMPT, context, headline, "\n\n".join(fallback_lines))
 
 

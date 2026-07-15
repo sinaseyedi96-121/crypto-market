@@ -7,8 +7,8 @@ broad U.S. dollar index, derivatives positioning, and crypto-wide liquidity.
 ## What it posts
 
 - A daily market-map chart covering all ten assets in one post
-- A daily derivatives pulse: perpetual funding rates and long/short account
-  ratio for BTC/ETH/SOL, plus CoinGecko's trending coins
+- A daily derivatives pulse: perpetual funding rates and open interest for
+  BTC/ETH/SOL, plus CoinGecko's trending coins
 - A rotating two-asset deep-dive album using confirmed closed candles,
   with EMA20/EMA50, Bollinger Bands, volume, and long-history pivot levels
 - A weekday macro-close chart for the S&P 500, Fed broad dollar index, current
@@ -65,7 +65,7 @@ someone who knows Italian/EU financial-services regulation first.
    weekends alike:
    - 04:15 UTC daily — market map (also records the day's total market cap,
      BTC dominance, and stablecoin market cap for the weekly digest)
-   - 08:15 UTC daily — derivatives pulse (funding rates, long/short ratio,
+   - 08:15 UTC daily — derivatives pulse (funding rates, open interest,
      trending coins)
    - 12:15 UTC daily — rotating two-asset deep dive
    - 16:15 UTC Sundays — weekly digest
@@ -117,7 +117,7 @@ That keeps the source free and correctly labelled.
 | File | Purpose |
 |---|---|
 | `config.py` | All constants — edit this first |
-| `data_fetcher.py` | Binance/CoinGecko OHLC, CoinGecko global/stablecoin/trending data, Bybit funding/positioning, FRED macro data, and sentiment |
+| `data_fetcher.py` | Binance/CoinGecko OHLC, CoinGecko global/stablecoin/trending/derivatives data, FRED macro data, and sentiment |
 | `indicators.py` | RSI/EMA/MACD/Bollinger/ATR/rolling correlation, computed manually with pandas (not `pandas_ta`, which currently breaks on numpy ≥2.0) |
 | `chart_generator.py` | Renders every chart via `mplfinance`/`matplotlib` — candlesticks, rankings, scoreboards, and trend lines |
 | `narrative_generator.py` | DeepSeek calls for each post's write-up + the follow-up template |

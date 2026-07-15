@@ -11,10 +11,10 @@ import pandas as pd
 import config
 
 BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
-# Binance Futures (fapi.binance.com) returns HTTP 451 from US-region IPs, including
-# GitHub Actions' hosted runners, due to a regulatory geo-block on derivatives data.
-# Bybit's public v5 market-data API serves the same kind of data without that block.
-BYBIT_BASE_URL = "https://api.bybit.com"
+# Exchange-hosted derivatives APIs (Binance Futures, Bybit, ...) block traffic from
+# cloud/datacenter IP ranges, including GitHub Actions' hosted runners — confirmed by
+# both returning 451/403 in production. CoinGecko's /derivatives endpoint aggregates
+# funding rate and open interest across exchanges and, being CoinGecko, isn't blocked.
 
 
 def fetch_klines(symbol: str, interval: str, limit: int) -> pd.DataFrame:
@@ -182,36 +182,34 @@ def fetch_trending_coins(limit: int = config.TRENDING_COINS_LIMIT) -> list[dict]
     return trending
 
 
-def fetch_funding_rate(ticker: str) -> float:
-    """Latest perpetual funding rate as a percentage."""
-    resp = requests.get(
-        f"{BYBIT_BASE_URL}/v5/market/funding/history",
-        params={"category": "linear", "symbol": f"{ticker}USDT", "limit": 1},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    rows = resp.json().get("result", {}).get("list", [])
-    if not rows:
-        raise ValueError(f"Bybit returned no funding rate for {ticker}")
-    return float(rows[0]["fundingRate"]) * 100
-
-
-def fetch_long_short_ratio(ticker: str) -> float:
-    """Latest daily buy/sell account ratio (>1 means more long-leaning accounts)."""
-    resp = requests.get(
-        f"{BYBIT_BASE_URL}/v5/market/account-ratio",
-        params={"category": "linear", "symbol": f"{ticker}USDT", "period": "1d", "limit": 1},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    rows = resp.json().get("result", {}).get("list", [])
-    if not rows:
-        raise ValueError(f"Bybit returned no long/short ratio for {ticker}")
-    buy_ratio = float(rows[0]["buyRatio"])
-    sell_ratio = float(rows[0]["sellRatio"])
-    if sell_ratio <= 0:
-        raise ValueError(f"Bybit returned an invalid sell ratio for {ticker}")
-    return buy_ratio / sell_ratio
+def fetch_derivatives_snapshot(tickers: list[str]) -> list[dict]:
+    """Funding rate and open interest per ticker, aggregated by CoinGecko across
+    exchanges. For each ticker, picks the single highest-volume perpetual market
+    as the representative reading."""
+    rows = _coingecko_get("/derivatives").json()
+    wanted = set(tickers)
+    best: dict[str, dict] = {}
+    for row in rows:
+        index_id = row.get("index_id")
+        funding = row.get("funding_rate")
+        if index_id not in wanted or row.get("contract_type") != "perpetual" or funding is None:
+            continue
+        volume = float(row.get("volume_24h") or 0)
+        if index_id not in best or volume > best[index_id]["_volume"]:
+            best[index_id] = {
+                "ticker": index_id,
+                "funding_rate": float(funding),
+                "open_interest": float(row.get("open_interest") or 0),
+                "market": row.get("market", "?"),
+                "_volume": volume,
+            }
+    result = []
+    for ticker in tickers:
+        row = best.get(ticker)
+        if row:
+            row.pop("_volume")
+            result.append(row)
+    return result
 
 
 def fetch_fred_series(series_id: str, lookback: int = config.MACRO_LOOKBACK) -> pd.Series:
