@@ -33,8 +33,10 @@ DEEP_DIVE_ROTATION = [
 DEEP_DIVE_TIMEFRAME = "1d"
 CANDLE_LIMIT = 300                         # enough history for indicators and long-term levels
 
-# Tickers checked for funding rate / long-short ratio in the daily pulse post.
-PULSE_ASSETS = ["BTC", "ETH", "SOL"]
+# Tickers checked for funding rate / open interest in the daily pulse post.
+# Same tracked universe as ASSETS, minus LEO (an exchange token with no
+# perpetual futures market, so CoinGecko's /derivatives has no data for it).
+PULSE_ASSETS = ["BTC", "ETH", "BNB", "XRP", "SOL", "TRX", "HYPE", "DOGE", "ZEC"]
 TRENDING_COINS_LIMIT = 5
 
 # Day of week (Monday=0 .. Sunday=6) the weekly digest is allowed to publish.

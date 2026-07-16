@@ -69,5 +69,31 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add post_history.json
-          git diff --staged --quiet && echo "No state changes" || git commit -m "Update post history [skip ci]"
-          git push
+          if git diff --staged --quiet; then
+            echo "No state changes"
+            exit 0
+          fi
+          git commit -m "Update post history [skip ci]"
+
+          # Bunched-up schedule triggers can run back-to-back (same concurrency
+          # group, so serialized), but actions/checkout pins the ref to the SHA
+          # at trigger time, not the branch tip at run time — so a run queued
+          # behind another one can still start from a stale checkout and get
+          # its push rejected. Rebase onto the latest tip and retry; on a real
+          # conflict in this generated state file, our freshly-written version
+          # wins since it reflects this run's own result.
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt), rebasing onto latest main..."
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git checkout --ours -- post_history.json
+              git add post_history.json
+              git rebase --continue
+            fi
+            sleep $((RANDOM % 6 + 2))
+          done
+          echo "Failed to push after retries" >&2
+          exit 1

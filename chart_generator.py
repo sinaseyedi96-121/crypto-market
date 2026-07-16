@@ -187,10 +187,8 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict) -> str:
 
     last = display.iloc[-1]
     current_price = float(last["Close"])
-    price_ax.axhline(current_price, color=CURRENT, linewidth=0.9, linestyle=(0, (3, 4)), alpha=0.85)
     _price_label(price_ax, levels["support"], "SUPPORT", SUPPORT)
     _price_label(price_ax, levels["resistance"], "RESISTANCE", RESISTANCE)
-    _price_label(price_ax, current_price, "CLOSE", "#9A7B24")
 
     legend = [
         Line2D([0], [0], color=EMA_FAST, lw=2, label=f"EMA {config.EMA_FAST}"),
@@ -219,14 +217,14 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict) -> str:
     close_time = last.get("CloseTime", display.index[-1])
     close_time = str(close_time).replace("+00:00", "")[:16]
     stats = (
-        f"{_display_symbol(symbol, quote)}  ·  {timeframe.upper()}     CLOSE  {current_price:,.2f}     "
+        f"{_technical_headline(last, levels)}     CLOSE  {current_price:,.2f}     "
         f"RSI  {last['rsi']:.1f}     "
         f"ATR  {last['atr_pct']:.2f}%     "
         f"BB WIDTH  {last['bb_width_pct']:.2f}%"
     )
 
     fig.subplots_adjust(left=0.075, right=0.93, top=0.82, bottom=0.12, hspace=0.08)
-    fig.text(0.075, 0.94, _technical_headline(last, levels),
+    fig.text(0.075, 0.94, f"{_display_symbol(symbol, quote)}  ·  {timeframe.upper()}",
              color=TEXT, fontsize=22, fontweight="bold", ha="left", va="center")
     fig.text(0.075, 0.895, stats, color=MUTED, fontsize=10, ha="left", va="center")
     fig.text(0.925, 0.94, "MARKET SNAPSHOT", color=EMA_FAST, fontsize=9,
@@ -448,7 +446,8 @@ def generate_pulse_chart(derivatives_rows: list[dict]) -> str:
     os.makedirs(config.CHART_DIR, exist_ok=True)
     out_path = os.path.join(config.CHART_DIR, "daily_pulse.png")
 
-    fig, (ax_funding, ax_oi) = plt.subplots(1, 2, figsize=(12.8, 6.4), facecolor=BACKGROUND)
+    height = min(4.9 + 0.5 * len(derivatives_rows), 10.0)
+    fig, (ax_funding, ax_oi) = plt.subplots(1, 2, figsize=(12.8, height), facecolor=BACKGROUND)
     for ax in (ax_funding, ax_oi):
         _clean_axes(ax)
 

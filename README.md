@@ -7,8 +7,8 @@ broad U.S. dollar index, derivatives positioning, and crypto-wide liquidity.
 ## What it posts
 
 - A daily market-map chart covering all ten assets in one post
-- A daily derivatives pulse: perpetual funding rates and open interest for
-  BTC/ETH/SOL, plus CoinGecko's trending coins
+- A daily derivatives pulse: perpetual funding rates and open interest across
+  the tracked universe, plus CoinGecko's trending coins
 - A rotating two-asset deep-dive album using confirmed closed candles,
   with EMA20/EMA50, Bollinger Bands, volume, and long-history pivot levels
 - A weekday macro-close chart for the S&P 500, Fed broad dollar index, current
