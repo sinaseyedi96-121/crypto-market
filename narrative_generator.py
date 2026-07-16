@@ -90,11 +90,11 @@ def _format_for_telegram(text: str) -> str:
     return "\n\n".join(lines)
 
 
-def _fit_caption(body: str) -> str:
+def _fit_caption(body: str, disclaimer: str = config.DISCLAIMER) -> str:
     """Keep complete lines and reserve room for the mandatory disclaimer."""
-    limit = config.TELEGRAM_CAPTION_LIMIT - len(config.DISCLAIMER)
+    limit = config.TELEGRAM_CAPTION_LIMIT - len(disclaimer)
     if len(body) <= limit:
-        return body + config.DISCLAIMER
+        return body + disclaimer
 
     kept = []
     for line in body.split("\n\n"):
@@ -102,7 +102,7 @@ def _fit_caption(body: str) -> str:
         if len(candidate) > limit:
             break
         kept.append(line)
-    return "\n\n".join(kept) + config.DISCLAIMER
+    return "\n\n".join(kept) + disclaimer
 
 
 def _complete(system_prompt: str, context: str, headline: str, fallback: str) -> str:
@@ -418,3 +418,41 @@ def generate_event_alert(ticker: str, price: float, event: str, levels: dict,
         f"🕒 Closed {close_time[:16]} UTC · {source}"
     )
     return _fit_caption(body)
+
+
+def generate_signal_post(ticker: str, timeframe: str, direction: str, entry: float,
+                          target: float, stop: float, trend: str, rsi: float) -> str:
+    """Deterministic hypothetical long/short scenario post (no AI call, so the
+    numbers can never drift from what was actually computed)."""
+    arrow = "🟢 LONG" if direction == "long" else "🔴 SHORT"
+    risk = abs(entry - stop)
+    reward = abs(target - entry)
+    reward_risk = reward / risk if risk else 0.0
+    body = (
+        f"🧪 {arrow} hypothetical scenario\n\n"
+        f"📈 Trend basis: {trend.split(':', 1)[0]}\n\n"
+        f"⚡ RSI: {rsi:.1f}\n\n"
+        f"💰 Hypothetical entry: {_price(entry)}\n\n"
+        f"🎯 Hypothetical target: {_price(target)}\n\n"
+        f"🛑 Hypothetical stop: {_price(stop)}\n\n"
+        f"📐 Reward:risk ~{reward_risk:.2f}\n\n"
+        f"🕒 {timeframe.upper()} confirmed candle"
+    )
+    headline = f"🧪 {ticker} HYPOTHETICAL {direction.upper()} SCENARIO"
+    return _fit_caption(f"{headline}\n\n{body}", config.SIGNAL_DISCLAIMER)
+
+
+def generate_signal_outcome(ticker: str, timeframe: str, direction: str, entry: float,
+                             exit_price: float, outcome: str, r_multiple: float,
+                             close_time: str) -> str:
+    """Deterministic factual close-out for a previously posted hypothetical scenario."""
+    result_emoji = "✅" if outcome == "target" else "🛑"
+    label = "TARGET HIT" if outcome == "target" else "STOP HIT"
+    body = (
+        f"{result_emoji} Hypothetical {direction} scenario: {label.lower()}\n\n"
+        f"💰 Entry {_price(entry)} → close {_price(exit_price)}\n\n"
+        f"📐 Result: {r_multiple:+.2f}R\n\n"
+        f"🕒 Confirmed {timeframe.upper()} close · {close_time[:16]} UTC"
+    )
+    headline = f"📊 {ticker} HYPOTHETICAL SCENARIO CLOSED: {label}"
+    return _fit_caption(f"{headline}\n\n{body}", config.SIGNAL_DISCLAIMER)

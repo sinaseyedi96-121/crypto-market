@@ -69,6 +69,24 @@ LEVEL_CLUSTER_ATR_MULTIPLIER = 0.40        # merge nearby pivots into one level
 FOLLOWUP_THRESHOLD_PCT = 1.5
 MAX_EVENT_ALERTS_PER_DAY = 2
 
+# ---- Hypothetical trade posts (educational only, see README) ----
+# One open hypothetical scenario per asset at a time; entry is the confirmed
+# deep-dive close, target/stop are the existing support/resistance levels.
+MAX_OPEN_SIGNALS_PER_ASSET = 1
+SIGNAL_DISCLAIMER = (
+    "\n\n⚠️ Hypothetical educational scenario, not a trade recommendation. "
+    "Not financial advice."
+)
+
+# ---- Content review (weekly DeepSeek critique, see README) ----
+POSTS_LOG_FILE = "posts_log.jsonl"
+REVIEW_LOOKBACK_DAYS = 7
+REVIEW_REPORT_FILE = "review_report.md"
+REVIEWER_MAX_TOKENS = 8000
+# The reviewer may only propose full-file replacements for these two files —
+# prompt wording and tunable constants, never the trading/indicator logic.
+REVIEWER_EDITABLE_FILES = ["narrative_generator.py", "config.py"]
+
 # ---- DeepSeek (text generation) ----
 DEEPSEEK_MODEL = "deepseek-v4-pro"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"

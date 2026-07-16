@@ -158,6 +158,35 @@ class SchedulingTests(unittest.TestCase):
             with patch.dict(os.environ, {"CRON_SCHEDULE": cron}):
                 self.assertEqual(main._automatic_mode(), mode)
 
+    def test_signal_direction_from_trend(self):
+        self.assertEqual(main._signal_direction("bullish: fast EMA above slow EMA"), "long")
+        self.assertEqual(main._signal_direction("bearish: fast EMA below slow EMA"), "short")
+        self.assertIsNone(main._signal_direction("mixed/transitioning: no agreement"))
+
+    def test_evaluate_signal_long_target_and_stop(self):
+        signal = {"direction": "long", "entry": 100.0, "target": 110.0, "stop": 95.0}
+        outcome, r_multiple = main._evaluate_signal(signal, 111.0)
+        self.assertEqual(outcome, "target")
+        self.assertAlmostEqual(r_multiple, 2.2)
+
+        outcome, r_multiple = main._evaluate_signal(signal, 94.0)
+        self.assertEqual(outcome, "stop")
+        self.assertAlmostEqual(r_multiple, -1.2)
+
+        self.assertIsNone(main._evaluate_signal(signal, 102.0))
+
+    def test_evaluate_signal_short_target_and_stop(self):
+        signal = {"direction": "short", "entry": 100.0, "target": 90.0, "stop": 105.0}
+        outcome, r_multiple = main._evaluate_signal(signal, 89.0)
+        self.assertEqual(outcome, "target")
+        self.assertAlmostEqual(r_multiple, 2.2)
+
+        outcome, r_multiple = main._evaluate_signal(signal, 106.0)
+        self.assertEqual(outcome, "stop")
+        self.assertAlmostEqual(r_multiple, -1.2)
+
+        self.assertIsNone(main._evaluate_signal(signal, 98.0))
+
 
 class NarrativeTests(unittest.TestCase):
     def test_formatting_removes_list_markers_and_adds_spacing(self):
@@ -222,6 +251,23 @@ class NarrativeTests(unittest.TestCase):
             )
         self.assertIn("WEEKLY DIGEST", result)
         self.assertTrue(result.endswith(config.DISCLAIMER))
+
+    def test_signal_post_labels_direction_and_hypothetical_disclaimer(self):
+        result = narrative_generator.generate_signal_post(
+            "ETH", "1d", "long", 1800.0, 1900.0, 1700.0, "bullish: trend up", 55.0
+        )
+        self.assertIn("LONG", result)
+        self.assertIn("ETH", result)
+        self.assertIn("Hypothetical", result)
+        self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMER))
+
+    def test_signal_outcome_reports_result_and_disclaimer(self):
+        result = narrative_generator.generate_signal_outcome(
+            "ETH", "1d", "long", 1800.0, 1900.0, "target", 2.0, "2026-01-01T00:00:00"
+        )
+        self.assertIn("TARGET HIT", result)
+        self.assertIn("+2.00R", result)
+        self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMER))
 
 
 class ChartTests(unittest.TestCase):

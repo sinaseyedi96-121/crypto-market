@@ -29,3 +29,27 @@ def get_entry(state: dict, symbol: str, timeframe: str) -> dict | None:
 
 def set_entry(state: dict, symbol: str, timeframe: str, entry: dict) -> None:
     state.setdefault(symbol, {})[timeframe] = entry
+
+
+def get_open_signal(state: dict, symbol: str) -> dict | None:
+    return state.get("_signals", {}).get(symbol)
+
+
+def open_signal(state: dict, symbol: str, signal: dict) -> None:
+    state.setdefault("_signals", {})[symbol] = signal
+
+
+def close_signal(state: dict, symbol: str) -> dict | None:
+    return state.get("_signals", {}).pop(symbol, None)
+
+
+def append_post_log(entry: dict) -> None:
+    """Append one JSONL record for the content reviewer to read later.
+
+    Best-effort: a logging failure should never break a publishing run.
+    """
+    try:
+        with open(config.POSTS_LOG_FILE, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError as exc:
+        print(f"Could not append to posts log: {exc}")

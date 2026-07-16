@@ -1,0 +1,55 @@
+name: Content Review
+
+on:
+  schedule:
+    - cron: '0 9 * * 0'   # weekly, Sunday 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: crypto-content-review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run content reviewer
+        id: review
+        env:
+          DEEPSEEK_KEY: ${{ secrets.DEEPSEEK_KEY }}
+        run: python content_reviewer.py
+
+      - name: Open pull request with proposed changes
+        if: steps.review.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="content-review/${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add narrative_generator.py config.py
+          git commit -m "Content review: proposed narrative/config update"
+          git push origin "$branch"
+          gh pr create \
+            --title "Weekly content review $(date -u +%Y-%m-%d)" \
+            --body-file review_report.md \
+            --base main \
+            --head "$branch"
+
+      - name: Post review summary
+        if: always()
+        run: cat review_report.md >> "$GITHUB_STEP_SUMMARY"

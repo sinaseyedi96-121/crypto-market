@@ -30,6 +30,78 @@ ROME = ZoneInfo("Europe/Rome")
 NEW_YORK = ZoneInfo("America/New_York")
 
 
+def _signal_direction(trend: str) -> str | None:
+    regime = trend.split(":", 1)[0]
+    if regime == "bullish":
+        return "long"
+    if regime == "bearish":
+        return "short"
+    return None
+
+
+def _evaluate_signal(signal: dict, price: float) -> tuple[str, float] | None:
+    """Checks a confirmed close against an open hypothetical signal's target/stop."""
+    direction = signal["direction"]
+    entry = signal["entry"]
+    target = signal["target"]
+    stop = signal["stop"]
+    risk = abs(entry - stop)
+    reward_actual = (price - entry) if direction == "long" else (entry - price)
+    r_multiple = reward_actual / risk if risk else 0.0
+    hit_target = price >= target if direction == "long" else price <= target
+    hit_stop = price <= stop if direction == "long" else price >= stop
+    if hit_target:
+        return "target", r_multiple
+    if hit_stop:
+        return "stop", r_multiple
+    return None
+
+
+def _maybe_open_signal(state: dict, chat_id: str, asset: dict, timeframe: str,
+                        analysis: dict, chart_message_id: int | None) -> None:
+    """Opens one hypothetical long/short scenario per asset, as a reply under
+    its own chart, if none is already open. Educational only — see README."""
+    symbol = asset["symbol"]
+    if state_manager.get_open_signal(state, symbol):
+        return
+    direction = _signal_direction(analysis["trend"])
+    if not direction or not chart_message_id:
+        return
+
+    levels = analysis["levels"]
+    entry = analysis["price"]
+    target = levels["resistance"] if direction == "long" else levels["support"]
+    stop = levels["support"] if direction == "long" else levels["resistance"]
+    caption = narrative_generator.generate_signal_post(
+        asset["ticker"], timeframe, direction, entry, target, stop,
+        analysis["trend"], analysis["rsi"],
+    )
+    posted = telegram_publisher.reply_to_message(chat_id, chart_message_id, caption)
+    state_manager.open_signal(state, symbol, {
+        "direction": direction,
+        "entry": entry,
+        "target": target,
+        "stop": stop,
+        "timeframe": timeframe,
+        "opened_at": time.time(),
+        "message_id": posted.get("message_id"),
+    })
+    state_manager.append_post_log({
+        "timestamp": time.time(),
+        "mode": "signal_open",
+        "ticker": asset["ticker"],
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "direction": direction,
+        "entry": entry,
+        "target": target,
+        "stop": stop,
+        "caption": caption,
+        "message_id": posted.get("message_id"),
+    })
+    print(f"Opened hypothetical {direction} scenario for {asset['ticker']}.")
+
+
 def check_followup(prev_entry: dict, current_price: float) -> str | None:
     if not prev_entry:
         return None
@@ -119,7 +191,13 @@ def run_market_map(state: dict, chat_id: str, force: bool = False) -> None:
     fear_greed = data_fetcher.fetch_fear_greed_index()
     chart_path = chart_generator.generate_market_map_chart(snapshot)
     caption = narrative_generator.generate_market_map(snapshot, fear_greed)
-    _publish(chat_id, [chart_path], caption)
+    posted = _publish(chat_id, [chart_path], caption)
+    state_manager.append_post_log({
+        "timestamp": time.time(),
+        "mode": "market_map",
+        "caption": caption,
+        "message_id": posted.get("message_id"),
+    })
     _mark_slot(state, "market_map")
     print("Posted daily market map.")
 
@@ -148,7 +226,15 @@ def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
         followup = check_followup(previous, current_price)
         if followup and previous.get("message_id"):
             text = narrative_generator.generate_followup(ticker, timeframe, followup)
-            telegram_publisher.reply_to_message(chat_id, previous["message_id"], text)
+            followup_posted = telegram_publisher.reply_to_message(chat_id, previous["message_id"], text)
+            state_manager.append_post_log({
+                "timestamp": time.time(),
+                "mode": "followup",
+                "ticker": ticker,
+                "timeframe": timeframe,
+                "caption": text,
+                "message_id": followup_posted.get("message_id"),
+            })
             print(f"Posted {ticker} level follow-up.")
 
         chart_paths.append(chart_generator.generate_chart(frame, asset["symbol"], timeframe, levels))
@@ -167,7 +253,18 @@ def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
     fear_greed = data_fetcher.fetch_fear_greed_index()
     caption = narrative_generator.generate_comparison(analyses, fear_greed)
     posted = _publish(chat_id, chart_paths, caption)
-    for asset, levels, current_price, candle_closed_at in pending_state:
+    state_manager.append_post_log({
+        "timestamp": time.time(),
+        "mode": "deep_dive",
+        "assets": list(pair),
+        "timeframe": timeframe,
+        "caption": caption,
+        "message_id": posted.get("message_id"),
+    })
+    album_ids = posted.get("album_message_ids") or [posted.get("message_id")] * len(pair)
+    for (asset, levels, current_price, candle_closed_at), analysis, chart_message_id in zip(
+        pending_state, analyses, album_ids
+    ):
         state_manager.set_entry(state, asset["symbol"], timeframe, {
             "levels": levels,
             "price_at_post": current_price,
@@ -175,6 +272,7 @@ def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
             "posted_at": posted.get("date"),
             "candle_closed_at": candle_closed_at,
         })
+        _maybe_open_signal(state, chat_id, asset, timeframe, analysis, chart_message_id)
     _mark_slot(state, "deep_dive")
     print(f"Posted deep-dive album for {' + '.join(pair)}.")
 
@@ -218,6 +316,35 @@ def run_alert_scan(state: dict, chat_id: str, force: bool = False) -> None:
         except Exception as exc:
             print(f"Skipping {asset['ticker']} alert scan: {exc}", file=sys.stderr)
             continue
+
+        open_signal = state_manager.get_open_signal(state, asset["symbol"])
+        if open_signal:
+            result = _evaluate_signal(open_signal, price)
+            if result:
+                outcome, r_multiple = result
+                outcome_caption = narrative_generator.generate_signal_outcome(
+                    asset["ticker"], open_signal["timeframe"], open_signal["direction"],
+                    open_signal["entry"], price, outcome, r_multiple, close_time,
+                )
+                outcome_posted = telegram_publisher.reply_to_message(
+                    chat_id, open_signal["message_id"], outcome_caption
+                )
+                state_manager.close_signal(state, asset["symbol"])
+                state_manager.append_post_log({
+                    "timestamp": time.time(),
+                    "mode": "signal_close",
+                    "ticker": asset["ticker"],
+                    "symbol": asset["symbol"],
+                    "timeframe": open_signal["timeframe"],
+                    "direction": open_signal["direction"],
+                    "entry": open_signal["entry"],
+                    "exit_price": price,
+                    "outcome": outcome,
+                    "r_multiple": r_multiple,
+                    "caption": outcome_caption,
+                    "message_id": outcome_posted.get("message_id"),
+                })
+                print(f"Closed hypothetical {open_signal['direction']} scenario for {asset['ticker']}: {outcome} ({r_multiple:+.2f}R).")
 
         if not force and previous and previous.get("candle_closed_at") == close_time:
             continue
@@ -266,6 +393,14 @@ def run_alert_scan(state: dict, chat_id: str, force: bool = False) -> None:
         posted = _publish(chat_id, [path], caption)
         candidate["entry"]["message_id"] = posted.get("message_id")
         candidate["entry"]["posted_at"] = posted.get("date")
+        state_manager.append_post_log({
+            "timestamp": time.time(),
+            "mode": "alert",
+            "ticker": asset["ticker"],
+            "timeframe": timeframe,
+            "caption": caption,
+            "message_id": posted.get("message_id"),
+        })
         used += 1
         print(f"Posted confirmed 4h alert for {asset['ticker']}.")
 
@@ -311,7 +446,13 @@ def run_macro_close(state: dict, chat_id: str, force: bool = False) -> None:
     _enrich_macro_snapshot(macro)
     chart_path = chart_generator.generate_macro_chart(macro)
     caption = narrative_generator.generate_macro(macro)
-    _publish(chat_id, [chart_path], caption)
+    posted = _publish(chat_id, [chart_path], caption)
+    state_manager.append_post_log({
+        "timestamp": time.time(),
+        "mode": "macro_close",
+        "caption": caption,
+        "message_id": posted.get("message_id"),
+    })
     _mark_slot(state, "macro_close")
     print("Posted macro close.")
 

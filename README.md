@@ -21,6 +21,9 @@ broad U.S. dollar index, derivatives positioning, and crypto-wide liquidity.
   (ATR/Bollinger), and the Fear & Greed Index
 - If price later breaks a zone flagged in an earlier post, a factual
   follow-up reply is posted under that original message
+- A hypothetical long/short scenario per deep-dive asset, closed out and
+  scored with a factual reply once price confirms through target or stop
+  (see "Hypothetical trade posts" below)
 
 ## Goals
 
@@ -28,6 +31,31 @@ All goal of these posts are educational only, and not financial advice.
 
 If you want to enter a trading business, worth a proper conversation with
 someone who knows financial-services regulation first.
+
+## Hypothetical trade posts (educational)
+
+The deep-dive posts include a hypothetical long/short scenario derived from
+the same support/resistance levels already shown on the chart: a hypothetical
+entry at the confirmed close, with the opposite level used as target and stop.
+When price later confirms a close through either level, a factual reply
+reports the outcome (target/stop hit, R multiple, time held).
+
+This is explicitly labeled in every such post as a hypothetical, educational
+scenario — not a trade recommendation, not investment advice, and not an
+instruction to enter, exit, or size a position. The channel and this README
+both carry that disclaimer. No entry/target/stop is ever framed as something
+to act on.
+
+## Content review
+
+A weekly GitHub Actions job (`content_review.yml`) sends recent post captions
+and the hypothetical-signal track record (win rate, average R) to DeepSeek for
+a structured critique — scientific accuracy, audience/marketing quality, and
+whether the hypothetical scenarios are well-calibrated. If it proposes concrete
+wording or constant changes to `narrative_generator.py` / `config.py`, those
+files are syntax-checked and run through the test suite; only if both pass
+does the job open a pull request (never a direct commit to `main`) with the
+review as the PR description, for a human to read and merge.
 
 ## Setup
 
@@ -112,8 +140,9 @@ That keeps the source free and correctly labelled.
 | `chart_generator.py` | Renders every chart via `mplfinance`/`matplotlib` — candlesticks, rankings, scoreboards, and trend lines |
 | `narrative_generator.py` | DeepSeek calls for each post's write-up + the follow-up template |
 | `telegram_publisher.py` | Posts photo+caption, and reply-to-message for follow-ups |
-| `state_manager.py` | Persists last-posted levels/message IDs to `post_history.json` |
+| `state_manager.py` | Persists last-posted levels/message IDs and open hypothetical signals to `post_history.json`, and appends every post to `posts_log.jsonl` |
 | `main.py` | Orchestrates all of the above |
+| `content_reviewer.py` | DeepSeek weekly critique of recent posts and signal track record; proposes narrative/config changes |
 
 ## Posting volume
 
