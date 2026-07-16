@@ -58,7 +58,7 @@
   },
   "_schedule": {
     "market_map": "2026-07-16",
-    "deep_dive": "2026-07-15",
+    "deep_dive": "2026-07-16",
     "macro_close": "2026-07-16",
     "daily_pulse": "2026-07-16"
   },
@@ -156,6 +156,20 @@
       "posted_at": null,
       "candle_closed_at": "2026-07-16T03:59:59.999000",
       "trend": "bearish: fast EMA below slow EMA, price below slow EMA, fast EMA falling"
+    },
+    "1d": {
+      "levels": {
+        "support": 0.32,
+        "resistance": 0.33,
+        "support_touches": 3,
+        "resistance_touches": 2,
+        "lookback": 180,
+        "zone_width": 0.0
+      },
+      "price_at_post": 0.3245,
+      "message_id": 32,
+      "posted_at": 1784220765,
+      "candle_closed_at": "2026-07-15T23:59:59.999000"
     }
   },
   "HYPEUSDT": {
@@ -173,6 +187,20 @@
       "posted_at": 1784188145,
       "candle_closed_at": "2026-07-16T03:59:59.999000",
       "trend": "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
+    },
+    "1d": {
+      "levels": {
+        "support": 56.29,
+        "resistance": 67.47,
+        "support_touches": 2,
+        "resistance_touches": 1,
+        "lookback": 180,
+        "zone_width": 1.34
+      },
+      "price_at_post": 67.02272524866152,
+      "message_id": 32,
+      "posted_at": 1784220765,
+      "candle_closed_at": "2026-07-15T23:59:59.999000"
     }
   },
   "DOGEUSDT": {
