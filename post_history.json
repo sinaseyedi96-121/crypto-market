@@ -58,7 +58,7 @@
   },
   "_schedule": {
     "market_map": "2026-07-17",
-    "deep_dive": "2026-07-16",
+    "deep_dive": "2026-07-17",
     "macro_close": "2026-07-17",
     "daily_pulse": "2026-07-17"
   },
@@ -249,6 +249,20 @@
       "posted_at": 1784100707,
       "candle_closed_at": "2026-07-17T11:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
+    },
+    "1d": {
+      "levels": {
+        "support": 8.99,
+        "resistance": 10.1,
+        "support_touches": 3,
+        "resistance_touches": 4,
+        "lookback": 180,
+        "zone_width": 0.05
+      },
+      "price_at_post": 9.816293477229971,
+      "message_id": 40,
+      "posted_at": 1784306480,
+      "candle_closed_at": "2026-07-16T23:59:59.999000"
     }
   },
   "ZECUSDT": {
@@ -266,6 +280,20 @@
       "posted_at": 1784100709,
       "candle_closed_at": "2026-07-17T11:59:59.999000",
       "trend": "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
+    },
+    "1d": {
+      "levels": {
+        "support": 494.61,
+        "resistance": 643.75,
+        "support_touches": 2,
+        "resistance_touches": 2,
+        "lookback": 180,
+        "zone_width": 18.05
+      },
+      "price_at_post": 523.72,
+      "message_id": 40,
+      "posted_at": 1784306480,
+      "candle_closed_at": "2026-07-16T23:59:59.999000"
     }
   },
   "_alerts": {
@@ -285,5 +313,16 @@
       "btc_dominance": 56.11988504882029,
       "stablecoin_mcap": 304878098833.0
     }
-  ]
+  ],
+  "_signals": {
+    "ZECUSDT": {
+      "direction": "long",
+      "entry": 523.72,
+      "target": 643.75,
+      "stop": 494.61,
+      "timeframe": "1d",
+      "opened_at": 1784306481.459902,
+      "message_id": 42
+    }
+  }
 }
