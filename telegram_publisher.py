@@ -61,6 +61,20 @@ def post_charts(chat_id: str, image_paths: list[str], caption: str) -> dict:
             file_handle.close()
 
 
+def reply_with_photo(chat_id: str, reply_to_message_id: int, image_path: str, caption: str) -> dict:
+    """Posts a chart threaded as a reply (used for the trade-signal open post)."""
+    caption = caption[: config.TELEGRAM_CAPTION_LIMIT]
+    with open(image_path, "rb") as f:
+        resp = requests.post(
+            f"{_base_url()}/sendPhoto",
+            data={"chat_id": chat_id, "caption": caption, "reply_to_message_id": reply_to_message_id},
+            files={"photo": f},
+            timeout=30,
+        )
+    resp.raise_for_status()
+    return resp.json()["result"]
+
+
 def reply_to_message(chat_id: str, reply_to_message_id: int, text: str) -> dict:
     """Posts a text reply threaded under a previous post (used for follow-ups)."""
     resp = requests.post(

@@ -429,12 +429,12 @@ def generate_signal_post(ticker: str, timeframe: str, direction: str, entry: flo
     reward = abs(target - entry)
     reward_risk = reward / risk if risk else 0.0
     body = (
-        f"🧪 {arrow} hypothetical scenario\n\n"
+        f"{arrow} scenario\n\n"
         f"📈 Trend basis: {trend.split(':', 1)[0]}\n\n"
         f"⚡ RSI: {rsi:.1f}\n\n"
-        f"💰 Hypothetical entry: {_price(entry)}\n\n"
-        f"🎯 Hypothetical target: {_price(target)}\n\n"
-        f"🛑 Hypothetical stop: {_price(stop)}\n\n"
+        f"💰 Entry: {_price(entry)}\n\n"
+        f"🎯 Target: {_price(target)}\n\n"
+        f"🛑 Stop: {_price(stop)}\n\n"
         f"📐 Reward:risk ~{reward_risk:.2f}\n\n"
         f"🕒 {timeframe.upper()} confirmed candle"
     )
@@ -449,7 +449,7 @@ def generate_signal_outcome(ticker: str, timeframe: str, direction: str, entry: 
     result_emoji = "✅" if outcome == "target" else "🛑"
     label = "TARGET HIT" if outcome == "target" else "STOP HIT"
     body = (
-        f"{result_emoji} Hypothetical {direction} scenario: {label.lower()}\n\n"
+        f"{result_emoji} {direction.capitalize()} scenario: {label.lower()}\n\n"
         f"💰 Entry {_price(entry)} → close {_price(exit_price)}\n\n"
         f"📐 Result: {r_multiple:+.2f}R\n\n"
         f"🕒 Confirmed {timeframe.upper()} close · {close_time[:16]} UTC"

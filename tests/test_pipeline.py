@@ -296,6 +296,17 @@ class ChartTests(unittest.TestCase):
         self.assertTrue(os.path.basename(path).startswith("ETHUSDT_1d"))
         self.assertGreater(image.shape[1] / image.shape[0], 1.4)
 
+    def test_signal_chart_renders_entry_target_stop_labels(self):
+        frame = synthetic_market()
+        levels = indicators.find_key_levels(frame, lookback=180)
+        signal = {"direction": "long", "entry": 1800.0, "target": 1900.0, "stop": 1700.0}
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
+            path = chart_generator.generate_chart(frame, "ETHUSDT", "1d", levels, signal=signal)
+            image = mpimg.imread(path)
+
+        self.assertTrue(os.path.basename(path).startswith("ETHUSDT_1d_signal"))
+        self.assertGreater(image.shape[1] / image.shape[0], 1.4)
+
     def test_coin_gecko_chart_renders_without_volume(self):
         frame = synthetic_market()
         frame["Volume"] = 0

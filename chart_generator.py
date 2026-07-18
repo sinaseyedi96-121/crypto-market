@@ -1,5 +1,7 @@
 """Render a social-first technical chart from confirmed Binance candles."""
 
+from __future__ import annotations
+
 import os
 
 import matplotlib
@@ -120,9 +122,13 @@ def _price_label(ax, value: float, label: str, color: str) -> None:
     )
 
 
-def generate_chart(df, symbol: str, timeframe: str, levels: dict) -> str:
+def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict | None = None) -> str:
+    """Renders the standard support/resistance chart, or — when `signal` is
+    given ({"direction", "entry", "target", "stop"}) — the same chart with
+    entry/target/stop lines for a just-opened hypothetical scenario instead."""
     os.makedirs(config.CHART_DIR, exist_ok=True)
-    out_path = os.path.join(config.CHART_DIR, f"{symbol}_{timeframe}.png")
+    suffix = "_signal" if signal else ""
+    out_path = os.path.join(config.CHART_DIR, f"{symbol}_{timeframe}{suffix}.png")
     display = df.tail(config.CHART_DISPLAY_CANDLES).copy()
     source = df.attrs.get("source", "Binance")
     quote = "USD" if source == "CoinGecko" else "USDT"
@@ -134,13 +140,22 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict) -> str:
         mpf.make_addplot(display["ema_slow"], color=EMA_SLOW, width=1.4),
     ]
 
-    hlines = {
-        "hlines": [levels["support"], levels["resistance"]],
-        "colors": [SUPPORT, RESISTANCE],
-        "linestyle": ["-", "-"],
-        "linewidths": [1.15, 1.15],
-        "alpha": 0.9,
-    }
+    if signal:
+        hlines = {
+            "hlines": [signal["entry"], signal["target"], signal["stop"]],
+            "colors": [CURRENT, SUPPORT, RESISTANCE],
+            "linestyle": ["--", "-", "-"],
+            "linewidths": [1.3, 1.15, 1.15],
+            "alpha": 0.9,
+        }
+    else:
+        hlines = {
+            "hlines": [levels["support"], levels["resistance"]],
+            "colors": [SUPPORT, RESISTANCE],
+            "linestyle": ["-", "-"],
+            "linewidths": [1.15, 1.15],
+            "alpha": 0.9,
+        }
 
     has_volume = bool(display["Volume"].abs().sum())
     plot_kwargs = {"volume": has_volume}
@@ -187,8 +202,13 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict) -> str:
 
     last = display.iloc[-1]
     current_price = float(last["Close"])
-    _price_label(price_ax, levels["support"], "SUPPORT", SUPPORT)
-    _price_label(price_ax, levels["resistance"], "RESISTANCE", RESISTANCE)
+    if signal:
+        _price_label(price_ax, signal["entry"], "ENTRY", CURRENT)
+        _price_label(price_ax, signal["target"], "TARGET", SUPPORT)
+        _price_label(price_ax, signal["stop"], "STOP", RESISTANCE)
+    else:
+        _price_label(price_ax, levels["support"], "SUPPORT", SUPPORT)
+        _price_label(price_ax, levels["resistance"], "RESISTANCE", RESISTANCE)
 
     legend = [
         Line2D([0], [0], color=EMA_FAST, lw=2, label=f"EMA {config.EMA_FAST}"),
@@ -227,7 +247,13 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict) -> str:
     fig.text(0.075, 0.94, f"{_display_symbol(symbol, quote)}  ·  {timeframe.upper()}",
              color=TEXT, fontsize=22, fontweight="bold", ha="left", va="center")
     fig.text(0.075, 0.895, stats, color=MUTED, fontsize=10, ha="left", va="center")
-    fig.text(0.925, 0.94, "MARKET SNAPSHOT", color=EMA_FAST, fontsize=9,
+    badge = "MARKET SNAPSHOT"
+    badge_color = EMA_FAST
+    if signal:
+        is_long = signal["direction"] == "long"
+        badge = "LONG SCENARIO" if is_long else "SHORT SCENARIO"
+        badge_color = SUPPORT if is_long else RESISTANCE
+    fig.text(0.925, 0.94, badge, color=badge_color, fontsize=9,
              fontweight="bold", ha="right", va="center")
     fig.text(0.925, 0.895, f"CLOSED {close_time} UTC  ·  {source.upper()}",
              color=MUTED, fontsize=9, ha="right", va="center")

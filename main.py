@@ -58,9 +58,9 @@ def _evaluate_signal(signal: dict, price: float) -> tuple[str, float] | None:
 
 
 def _maybe_open_signal(state: dict, chat_id: str, asset: dict, timeframe: str,
-                        analysis: dict, chart_message_id: int | None) -> None:
-    """Opens one hypothetical long/short scenario per asset, as a reply under
-    its own chart, if none is already open. Educational only — see README."""
+                        analysis: dict, frame: pd.DataFrame, chart_message_id: int | None) -> None:
+    """Opens one hypothetical long/short scenario per asset, as a chart reply
+    under its own post, if none is already open. Educational only — see README."""
     symbol = asset["symbol"]
     if state_manager.get_open_signal(state, symbol):
         return
@@ -76,7 +76,11 @@ def _maybe_open_signal(state: dict, chat_id: str, asset: dict, timeframe: str,
         asset["ticker"], timeframe, direction, entry, target, stop,
         analysis["trend"], analysis["rsi"],
     )
-    posted = telegram_publisher.reply_to_message(chat_id, chart_message_id, caption)
+    signal_chart = chart_generator.generate_chart(
+        frame, symbol, timeframe, levels,
+        signal={"direction": direction, "entry": entry, "target": target, "stop": stop},
+    )
+    posted = telegram_publisher.reply_with_photo(chat_id, chart_message_id, signal_chart, caption)
     state_manager.open_signal(state, symbol, {
         "direction": direction,
         "entry": entry,
@@ -247,7 +251,7 @@ def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
             "price": current_price,
             "levels": levels,
         })
-        pending_state.append((asset, levels, current_price, candle_closed_at))
+        pending_state.append((asset, levels, current_price, candle_closed_at, frame))
         time.sleep(1)
 
     fear_greed = data_fetcher.fetch_fear_greed_index()
@@ -262,7 +266,7 @@ def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
         "message_id": posted.get("message_id"),
     })
     album_ids = posted.get("album_message_ids") or [posted.get("message_id")] * len(pair)
-    for (asset, levels, current_price, candle_closed_at), analysis, chart_message_id in zip(
+    for (asset, levels, current_price, candle_closed_at, frame), analysis, chart_message_id in zip(
         pending_state, analyses, album_ids
     ):
         state_manager.set_entry(state, asset["symbol"], timeframe, {
@@ -272,7 +276,7 @@ def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
             "posted_at": posted.get("date"),
             "candle_closed_at": candle_closed_at,
         })
-        _maybe_open_signal(state, chat_id, asset, timeframe, analysis, chart_message_id)
+        _maybe_open_signal(state, chat_id, asset, timeframe, analysis, frame, chart_message_id)
     _mark_slot(state, "deep_dive")
     print(f"Posted deep-dive album for {' + '.join(pair)}.")
 
