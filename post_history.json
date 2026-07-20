@@ -3,16 +3,16 @@
     "4h": {
       "levels": {
         "support": 62487.07,
-        "resistance": 65611.42,
+        "resistance": 64429.77,
         "support_touches": 2,
-        "resistance_touches": 2,
+        "resistance_touches": 5,
         "lookback": 180,
-        "zone_width": 198.29
+        "zone_width": 222.27
       },
-      "price_at_post": 64462.58,
+      "price_at_post": 64280.01,
       "message_id": 2,
       "posted_at": 1783945101,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -34,16 +34,16 @@
     "4h": {
       "levels": {
         "support": 1752.19,
-        "resistance": 1896.14,
+        "resistance": 1879.38,
         "support_touches": 3,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 8.1
+        "zone_width": 8.82
       },
-      "price_at_post": 1862.37,
+      "price_at_post": 1863.95,
       "message_id": 43,
       "posted_at": 1784327721,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -91,10 +91,10 @@
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 1.0949,
+      "price_at_post": 1.0902,
       "message_id": null,
       "posted_at": null,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
       "trend": "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
     }
   },
@@ -106,12 +106,12 @@
         "support_touches": 3,
         "resistance_touches": 4,
         "lookback": 180,
-        "zone_width": 1.7
+        "zone_width": 1.77
       },
-      "price_at_post": 568.15,
+      "price_at_post": 566.69,
       "message_id": 38,
       "posted_at": 1784290865,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
       "trend": "bearish: fast EMA below slow EMA, price below slow EMA, fast EMA falling"
     },
     "1d": {
@@ -132,17 +132,17 @@
   "SOLUSDT": {
     "4h": {
       "levels": {
-        "support": 74.5,
+        "support": 75.51,
         "resistance": 78.92,
-        "support_touches": 1,
+        "support_touches": 2,
         "resistance_touches": 3,
         "lookback": 180,
-        "zone_width": 0.35
+        "zone_width": 0.37
       },
-      "price_at_post": 75.88,
+      "price_at_post": 76.22,
       "message_id": null,
       "posted_at": null,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
       "trend": "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
     },
     "1d": {
@@ -170,10 +170,10 @@
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 0.3271,
+      "price_at_post": 0.3262,
       "message_id": 50,
       "posted_at": 1784414071,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
       "trend": "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
     },
     "1d": {
@@ -199,12 +199,12 @@
         "support_touches": 2,
         "resistance_touches": 3,
         "lookback": 180,
-        "zone_width": 0.29
+        "zone_width": 0.28
       },
-      "price_at_post": 60.57542720278994,
+      "price_at_post": 60.20625891816186,
       "message_id": 36,
       "posted_at": 1784273766,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
       "trend": "bearish: fast EMA below slow EMA, price below slow EMA, fast EMA falling"
     },
     "1d": {
@@ -228,14 +228,14 @@
         "support": 0.07,
         "resistance": 0.08,
         "support_touches": 3,
-        "resistance_touches": 4,
+        "resistance_touches": 5,
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 0.07229,
+      "price_at_post": 0.07186,
       "message_id": null,
       "posted_at": null,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
       "trend": "bearish: fast EMA below slow EMA, price below slow EMA, fast EMA falling"
     },
     "1d": {
@@ -259,15 +259,15 @@
         "support": 9.51,
         "resistance": 9.82,
         "support_touches": 4,
-        "resistance_touches": 3,
+        "resistance_touches": 4,
         "lookback": 180,
         "zone_width": 0.03
       },
-      "price_at_post": 9.787659153884762,
+      "price_at_post": 9.685850246189666,
       "message_id": 22,
       "posted_at": 1784100707,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
-      "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
+      "trend": "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
     },
     "1d": {
       "levels": {
@@ -288,17 +288,17 @@
     "4h": {
       "levels": {
         "support": 452.82,
-        "resistance": 556.53,
+        "resistance": 566.23,
         "support_touches": 3,
-        "resistance_touches": 1,
+        "resistance_touches": 2,
         "lookback": 180,
-        "zone_width": 5.26
+        "zone_width": 5.42
       },
-      "price_at_post": 550.04,
+      "price_at_post": 532.07,
       "message_id": 23,
       "posted_at": 1784100709,
-      "candle_closed_at": "2026-07-19T19:59:59.999000",
-      "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
+      "candle_closed_at": "2026-07-20T07:59:59.999000",
+      "trend": "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
     },
     "1d": {
       "levels": {
@@ -316,8 +316,8 @@
     }
   },
   "_alerts": {
-    "date": "2026-07-19",
-    "count": 1
+    "date": "2026-07-20",
+    "count": 0
   },
   "_daily_snapshots": [
     {
