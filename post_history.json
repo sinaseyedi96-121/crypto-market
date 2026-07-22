@@ -63,7 +63,7 @@
   },
   "_schedule": {
     "market_map": "2026-07-22",
-    "deep_dive": "2026-07-21",
+    "deep_dive": "2026-07-22",
     "macro_close": "2026-07-22",
     "daily_pulse": "2026-07-22"
   },
@@ -116,17 +116,17 @@
     },
     "1d": {
       "levels": {
-        "support": 572.06,
-        "resistance": 637.68,
+        "support": 558.71,
+        "resistance": 651.93,
         "support_touches": 4,
-        "resistance_touches": 4,
+        "resistance_touches": 3,
         "lookback": 180,
-        "zone_width": 7.14
+        "zone_width": 6.02
       },
-      "price_at_post": 581.87,
-      "message_id": 25,
-      "posted_at": 1784134482,
-      "candle_closed_at": "2026-07-14T23:59:59.999000"
+      "price_at_post": 573.95,
+      "message_id": 78,
+      "posted_at": 1784730366,
+      "candle_closed_at": "2026-07-21T23:59:59.999000"
     }
   },
   "SOLUSDT": {
@@ -241,16 +241,16 @@
     "1d": {
       "levels": {
         "support": 0.07,
-        "resistance": 0.12,
-        "support_touches": 2,
-        "resistance_touches": 3,
+        "resistance": 0.11,
+        "support_touches": 4,
+        "resistance_touches": 2,
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 0.07445,
-      "message_id": 25,
-      "posted_at": 1784134482,
-      "candle_closed_at": "2026-07-14T23:59:59.999000"
+      "price_at_post": 0.07339,
+      "message_id": 78,
+      "posted_at": 1784730366,
+      "candle_closed_at": "2026-07-21T23:59:59.999000"
     }
   },
   "LEOUSDT": {
@@ -390,6 +390,24 @@
       "timeframe": "1d",
       "opened_at": 1784644001.4132724,
       "message_id": 72
+    },
+    "BNBUSDT": {
+      "direction": "short",
+      "entry": 573.95,
+      "target": 558.71,
+      "stop": 651.93,
+      "timeframe": "1d",
+      "opened_at": 1784730368.0320988,
+      "message_id": 80
+    },
+    "DOGEUSDT": {
+      "direction": "short",
+      "entry": 0.07339,
+      "target": 0.07,
+      "stop": 0.11,
+      "timeframe": "1d",
+      "opened_at": 1784730376.5809822,
+      "message_id": 81
     }
   },
   "_schedule_weekly": {
