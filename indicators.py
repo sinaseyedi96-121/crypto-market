@@ -128,8 +128,10 @@ def _pick_level(clusters: list[_LevelCluster], current_price: float, side: str,
     return max(candidates, key=score)
 
 
-def find_key_levels(df: pd.DataFrame, lookback=config.LEVEL_LOOKBACK) -> dict:
-    """Find significant nearby levels from repeated pivots over longer history."""
+def _pivot_clusters(df: pd.DataFrame, lookback: int) -> tuple[list[_LevelCluster], list[_LevelCluster], float]:
+    """Detects pivot highs/lows over the given lookback and merges nearby ones
+    into clusters. Shared by find_key_levels (nearby walls for the chart) and
+    find_extended_target (farther levels for a signal's reward:risk target)."""
     recent = df.tail(lookback)
     if len(recent) < config.PIVOT_WINDOW * 2 + 1:
         raise ValueError("Not enough candles to calculate pivot levels")
@@ -145,8 +147,17 @@ def find_key_levels(df: pd.DataFrame, lookback=config.LEVEL_LOOKBACK) -> dict:
     current_atr = float(recent["atr"].iloc[-1])
     tolerance = max(current_atr * config.LEVEL_CLUSTER_ATR_MULTIPLIER, current_price * 0.003)
 
-    support = _pick_level(_cluster_pivots(low_points, tolerance), current_price, "support", len(recent))
-    resistance = _pick_level(_cluster_pivots(high_points, tolerance), current_price, "resistance", len(recent))
+    return _cluster_pivots(high_points, tolerance), _cluster_pivots(low_points, tolerance), tolerance
+
+
+def find_key_levels(df: pd.DataFrame, lookback=config.LEVEL_LOOKBACK) -> dict:
+    """Find significant nearby levels from repeated pivots over longer history."""
+    high_clusters, low_clusters, tolerance = _pivot_clusters(df, lookback)
+    recent = df.tail(lookback)
+    current_price = float(recent["Close"].iloc[-1])
+
+    support = _pick_level(low_clusters, current_price, "support", len(recent))
+    resistance = _pick_level(high_clusters, current_price, "resistance", len(recent))
 
     support_value = support.center if support else float(recent["Low"].min())
     resistance_value = resistance.center if resistance else float(recent["High"].max())
@@ -159,6 +170,37 @@ def find_key_levels(df: pd.DataFrame, lookback=config.LEVEL_LOOKBACK) -> dict:
         "lookback": len(recent),
         "zone_width": round(tolerance, 2),
     }
+
+
+def find_extended_target(df: pd.DataFrame, direction: str, entry: float, stop: float,
+                          min_reward_risk: float = config.MIN_SIGNAL_RISK_REWARD,
+                          lookback: int | None = None) -> float | None:
+    """Searches the farthest pivot level — across as much history as is
+    available, not just the near lookback used for support/resistance — that
+    still clears the minimum reward:risk ratio. Farther levels are tried
+    first so a signal captures as much of a legitimate move as the chart
+    history actually supports, instead of settling for the nearest wall.
+    Returns None if nothing in the available history clears the bar, in
+    which case no signal should be opened.
+    """
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+    lookback = len(df) if lookback is None else min(lookback, len(df))
+    high_clusters, low_clusters, _ = _pivot_clusters(df, lookback)
+    clusters = high_clusters if direction == "long" else low_clusters
+    # Every cluster is already a verified local swing pivot (see _pivot_clusters),
+    # so a single touch is still a legitimate level — unlike find_key_levels,
+    # which prefers repeated touches, this is ranked by distance because the
+    # goal here is the farthest level that clears the reward:risk bar.
+    eligible = [
+        cluster for cluster in clusters
+        if (cluster.center > entry if direction == "long" else cluster.center < entry)
+    ]
+    for cluster in sorted(eligible, key=lambda c: abs(c.center - entry), reverse=True):
+        if abs(cluster.center - entry) / risk >= min_reward_risk:
+            return round(cluster.center, 2)
+    return None
 
 
 def rolling_correlation(price_a: pd.Series, price_b: pd.Series, window: int) -> float | None:

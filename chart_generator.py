@@ -158,9 +158,12 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict |
         }
 
     has_volume = bool(display["Volume"].abs().sum())
+    rsi_panel = 2 if has_volume else 1
+    add_plots.append(
+        mpf.make_addplot(display["rsi"], panel=rsi_panel, color=EMA_SLOW, width=1.3)
+    )
     plot_kwargs = {"volume": has_volume}
-    if has_volume:
-        plot_kwargs["panel_ratios"] = (4.4, 1)
+    plot_kwargs["panel_ratios"] = (4.2, 1.0, 1.6) if has_volume else (4.2, 1.6)
     fig, axes = mpf.plot(
         display,
         type="candle",
@@ -168,7 +171,7 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict |
         addplot=add_plots,
         hlines=hlines,
         **plot_kwargs,
-        figratio=(16, 9),
+        figratio=(16, 10),
         figscale=1.15,
         datetime_format="%b %d",
         xrotation=0,
@@ -178,8 +181,10 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict |
 
     price_ax = axes[0]
     volume_ax = axes[2] if has_volume else None
+    rsi_ax = axes[rsi_panel * 2]
     fig.patch.set_facecolor(BACKGROUND)
     price_ax.set_facecolor(PANEL)
+    rsi_ax.set_facecolor(PANEL)
     if volume_ax is not None:
         volume_ax.set_facecolor(PANEL)
 
@@ -210,6 +215,22 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict |
         _price_label(price_ax, levels["support"], "SUPPORT", SUPPORT)
         _price_label(price_ax, levels["resistance"], "RESISTANCE", RESISTANCE)
 
+    rsi_values = display["rsi"].to_numpy(dtype=float)
+    rsi_ax.set_ylim(0, 100)
+    rsi_ax.set_yticks([30, 50, 70])
+    rsi_ax.fill_between(x_values, rsi_values, 0, color=EMA_SLOW, alpha=0.16, zorder=1)
+    rsi_ax.axhline(70, color=DOWN, linewidth=0.9, linestyle="--", alpha=0.55)
+    rsi_ax.axhline(30, color=UP, linewidth=0.9, linestyle="--", alpha=0.55)
+    rsi_ax.set_ylabel(f"RSI {config.RSI_PERIOD}", color=MUTED, fontsize=9, fontweight="bold", labelpad=14)
+    last_rsi = float(last["rsi"])
+    rsi_ax.text(
+        0.992, last_rsi, f" {last_rsi:.1f} ",
+        transform=rsi_ax.get_yaxis_transform(),
+        ha="right", va="center", color=TEXT, fontsize=8.5, fontweight="bold",
+        bbox={"boxstyle": "round,pad=0.2", "facecolor": EMA_SLOW, "edgecolor": EMA_SLOW, "alpha": 0.88},
+        zorder=8,
+    )
+
     legend = [
         Line2D([0], [0], color=EMA_FAST, lw=2, label=f"EMA {config.EMA_FAST}"),
         Line2D([0], [0], color=EMA_SLOW, lw=2, label=f"EMA {config.EMA_SLOW}"),
@@ -230,7 +251,7 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict |
     if volume_ax is not None:
         volume_ax.set_ylabel("VOLUME", color=MUTED, fontsize=9, fontweight="bold", labelpad=14)
         volume_ax.yaxis.set_major_formatter(FuncFormatter(_compact_number))
-    for ax in filter(None, (price_ax, volume_ax)):
+    for ax in filter(None, (price_ax, volume_ax, rsi_ax)):
         ax.grid(True, alpha=0.45)
         ax.tick_params(axis="both", labelsize=9)
 

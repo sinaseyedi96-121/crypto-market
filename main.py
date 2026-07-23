@@ -60,7 +60,10 @@ def _evaluate_signal(signal: dict, price: float) -> tuple[str, float] | None:
 def _maybe_open_signal(state: dict, chat_id: str, asset: dict, timeframe: str,
                         analysis: dict, frame: pd.DataFrame, chart_message_id: int | None) -> None:
     """Opens one hypothetical long/short scenario per asset, as a chart reply
-    under its own post, if none is already open. Educational only — see README."""
+    under its own post, if none is already open. Educational only — see README.
+    Stop is the nearby support/resistance level; target is the farthest pivot
+    level (searched across all fetched history) that still clears
+    config.MIN_SIGNAL_RISK_REWARD. If nothing does, no signal is opened."""
     symbol = asset["symbol"]
     if state_manager.get_open_signal(state, symbol):
         return
@@ -70,8 +73,12 @@ def _maybe_open_signal(state: dict, chat_id: str, asset: dict, timeframe: str,
 
     levels = analysis["levels"]
     entry = analysis["price"]
-    target = levels["resistance"] if direction == "long" else levels["support"]
     stop = levels["support"] if direction == "long" else levels["resistance"]
+    target = indicators.find_extended_target(frame, direction, entry, stop)
+    if target is None:
+        print(f"Skipped hypothetical {direction} scenario for {asset['ticker']}: "
+              f"no level clears the minimum {config.MIN_SIGNAL_RISK_REWARD:.0f}:1 reward:risk.")
+        return
     caption = narrative_generator.generate_signal_post(
         asset["ticker"], timeframe, direction, entry, target, stop,
         analysis["trend"], analysis["rsi"],

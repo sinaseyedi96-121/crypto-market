@@ -31,7 +31,8 @@ DEEP_DIVE_ROTATION = [
     ("SOL", "HYPE"),
 ]
 DEEP_DIVE_TIMEFRAME = "1d"
-CANDLE_LIMIT = 300                         # enough history for indicators and long-term levels
+CANDLE_LIMIT = 500                         # enough history for indicators, long-term levels, and a
+                                            # deep signal-target search (see find_extended_target)
 
 # Tickers checked for funding rate / open interest in the daily pulse post.
 # Same tracked universe as ASSETS, minus LEO (an exchange token with no
@@ -71,8 +72,12 @@ MAX_EVENT_ALERTS_PER_DAY = 2
 
 # ---- Hypothetical trade posts (educational only, see README) ----
 # One open hypothetical scenario per asset at a time; entry is the confirmed
-# deep-dive close, target/stop are the existing support/resistance levels.
+# deep-dive close, stop is the nearby support/resistance level, and target is
+# the farthest pivot level found across all fetched history that still clears
+# MIN_SIGNAL_RISK_REWARD (see indicators.find_extended_target). If nothing
+# clears it, no signal is opened for that asset that day.
 MAX_OPEN_SIGNALS_PER_ASSET = 1
+MIN_SIGNAL_RISK_REWARD = 3.0
 SIGNAL_DISCLAIMER = (
     "\n\n⚠️ Hypothetical educational scenario, not a trade recommendation. "
     "Not financial advice."

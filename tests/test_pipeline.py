@@ -120,6 +120,51 @@ class IndicatorTests(unittest.TestCase):
         self.assertIsNone(indicators.rolling_correlation(series, series, window=30))
 
 
+def tiered_pivot_frame() -> pd.DataFrame:
+    """A frame with three isolated pivot highs at increasing distances from a
+    flat 100 baseline, so tests can check that the farthest one that clears a
+    reward:risk bar is preferred over the nearest one."""
+    segments = [[100.0] * 20]
+    for peak in (110.0, 130.0, 160.0):
+        segments.append([100.0, 100.0 + (peak - 100.0) * 0.5, peak,
+                          100.0 + (peak - 100.0) * 0.5, 100.0])
+        segments.append([100.0] * 5)
+    segments.append([100.0] * 5)
+    values = [v for seg in segments for v in seg]
+    index = pd.date_range("2025-01-01", periods=len(values), freq="D")
+    close = pd.Series(values, index=index)
+    frame = pd.DataFrame(
+        {
+            "Open": close,
+            "High": close + 0.5,
+            "Low": close - 0.5,
+            "Close": close,
+            "Volume": 1_000_000.0,
+            "CloseTime": index + pd.Timedelta(days=1) - pd.Timedelta(milliseconds=1),
+        },
+        index=index,
+    )
+    return indicators.enrich(frame)
+
+
+class ExtendedTargetTests(unittest.TestCase):
+    def test_prefers_the_farthest_level_that_clears_the_bar(self):
+        frame = tiered_pivot_frame()
+        target = indicators.find_extended_target(frame, "long", entry=100.0, stop=95.0,
+                                                   min_reward_risk=3.0)
+        self.assertAlmostEqual(target, 160.0, delta=1.0)
+
+    def test_returns_none_when_nothing_clears_the_bar(self):
+        frame = tiered_pivot_frame()
+        target = indicators.find_extended_target(frame, "long", entry=100.0, stop=-100.0,
+                                                   min_reward_risk=3.0)
+        self.assertIsNone(target)
+
+    def test_returns_none_for_zero_risk(self):
+        frame = tiered_pivot_frame()
+        self.assertIsNone(indicators.find_extended_target(frame, "long", entry=100.0, stop=100.0))
+
+
 class SchedulingTests(unittest.TestCase):
     def test_universe_has_ten_unique_non_stablecoin_assets(self):
         tickers = [asset["ticker"] for asset in config.ASSETS]
