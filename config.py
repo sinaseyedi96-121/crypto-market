@@ -40,11 +40,15 @@ CANDLE_LIMIT = 500                         # enough history for indicators, long
 PULSE_ASSETS = ["BTC", "ETH", "BNB", "XRP", "SOL", "TRX", "HYPE", "DOGE", "ZEC"]
 TRENDING_COINS_LIMIT = 5
 
-# Day of week (Monday=0 .. Sunday=6) the weekly digest is allowed to publish.
-WEEKLY_DIGEST_WEEKDAY = 6
+# Day of week (Monday=0 .. Sunday=6) each weekly post is allowed to publish.
+WEEKLY_DIGEST_WEEKDAY = 6                   # Sunday: backward-looking recap
+SIGNAL_SCORECARD_WEEKDAY = 5               # Saturday: hypothetical-signal track record
+WHAT_TO_WATCH_WEEKDAY = 0                  # Monday: forward-looking week-ahead post
 
 # ---- Indicators ----
 RSI_PERIOD = 14
+RSI_OVERBOUGHT = 70                        # RSI at/above this reads as stretched to the upside
+RSI_OVERSOLD = 30                          # RSI at/below this reads as stretched to the downside
 EMA_FAST = 20
 EMA_SLOW = 50
 MACD_FAST = 12
@@ -69,6 +73,14 @@ LEVEL_CLUSTER_ATR_MULTIPLIER = 0.40        # merge nearby pivots into one level
 # reply on the original message describing what happened.
 FOLLOWUP_THRESHOLD_PCT = 1.5
 MAX_EVENT_ALERTS_PER_DAY = 2
+
+# ---- What to watch (weekly forward-looking post, see README) ----
+# An asset is flagged as "one to watch" when the confirmed close sits within
+# this % of a key support/resistance level (a decision point that a break or
+# bounce would resolve) or when RSI is stretched. Built entirely from data the
+# pipeline already fetches — no forward calendar dependency.
+WATCH_LEVEL_PROXIMITY_PCT = 4.0
+WATCH_MAX_ITEMS = 6
 
 # ---- Hypothetical trade posts (educational only, see README) ----
 # One open hypothetical scenario per asset at a time; entry is the confirmed

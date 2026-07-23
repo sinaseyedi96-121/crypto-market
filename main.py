@@ -22,6 +22,7 @@ import config
 import data_fetcher
 import indicators
 import narrative_generator
+import signal_record
 import state_manager
 import telegram_publisher
 
@@ -333,9 +334,19 @@ def run_alert_scan(state: dict, chat_id: str, force: bool = False) -> None:
             result = _evaluate_signal(open_signal, price)
             if result:
                 outcome, r_multiple = result
+                # Fold this just-closed scenario into the tally before it is
+                # logged, so the reply's running record includes itself. One
+                # asset is closing here, so its open slot no longer counts.
+                open_count = len(state.get("_signals", {})) - 1
+                scorecard = signal_record.load_scorecard(
+                    open_count=max(open_count, 0),
+                    include={"ticker": asset["ticker"], "outcome": outcome, "r_multiple": r_multiple},
+                )
+                record_line = signal_record.format_record_line(scorecard)
                 outcome_caption = narrative_generator.generate_signal_outcome(
                     asset["ticker"], open_signal["timeframe"], open_signal["direction"],
                     open_signal["entry"], price, outcome, r_multiple, close_time,
+                    record_line=record_line,
                 )
                 outcome_posted = telegram_publisher.reply_to_message(
                     chat_id, open_signal["message_id"], outcome_caption
@@ -542,6 +553,110 @@ def run_weekly_digest(state: dict, chat_id: str, force: bool = False) -> None:
     print("Posted weekly digest.")
 
 
+def run_signal_scorecard(state: dict, chat_id: str, force: bool = False) -> None:
+    """Weekly standalone track record of the hypothetical scenarios. Reads the
+    same posts_log the on-close replies write, so the two can never disagree."""
+    if not force and datetime.now(ROME).weekday() != config.SIGNAL_SCORECARD_WEEKDAY:
+        print("Not the signal scorecard's scheduled day; skipping.")
+        return
+    if not force and _slot_already_posted_week(state, "signal_scorecard"):
+        print("This week's signal scorecard was already posted; skipping duplicate.")
+        return
+
+    open_count = len(state.get("_signals", {}))
+    closed = signal_record._load_closed_signals()
+    scorecard = signal_record.compute_scorecard(closed, open_count=open_count)
+    chart_path = chart_generator.generate_signal_scorecard_chart(scorecard, closed)
+    caption = narrative_generator.generate_signal_scorecard(scorecard)
+    _publish(chat_id, [chart_path], caption)
+    _mark_slot_week(state, "signal_scorecard")
+    print(f"Posted signal scorecard ({scorecard['closed_count']} closed, {open_count} open).")
+
+
+def _watch_backdrop(state: dict) -> dict:
+    """Best-effort market backdrop for the what-to-watch post. Each piece
+    soft-fails so a single flaky fetch never blocks the core watchlist."""
+    backdrop: dict = {}
+    dominance = _snapshot_series(state, "btc_dominance")
+    if len(dominance) >= 2:
+        move = float(dominance.iloc[-1] - dominance.iloc[0])
+        if move > 0.3:
+            backdrop["dominance_note"] = "BTC dominance has been rising, which historically pressures altcoins"
+        elif move < -0.3:
+            backdrop["dominance_note"] = "BTC dominance has been falling, which often coincides with altcoin strength"
+        else:
+            backdrop["dominance_note"] = "BTC dominance has been broadly flat"
+    try:
+        backdrop["fear_greed"] = data_fetcher.fetch_fear_greed_index()
+    except Exception as exc:
+        print(f"What-to-watch Fear & Greed fetch failed: {exc}", file=sys.stderr)
+    try:
+        derivatives = data_fetcher.fetch_derivatives_snapshot(config.PULSE_ASSETS)
+        if derivatives:
+            avg_funding = sum(row["funding_rate"] for row in derivatives) / len(derivatives)
+            if avg_funding > 0.01:
+                backdrop["funding_note"] = "Perpetual funding is positive on balance, so leveraged longs are crowded"
+            elif avg_funding < -0.01:
+                backdrop["funding_note"] = "Perpetual funding is negative on balance, so leveraged shorts are crowded"
+    except Exception as exc:
+        print(f"What-to-watch funding fetch failed: {exc}", file=sys.stderr)
+    return backdrop
+
+
+def run_what_to_watch(state: dict, chat_id: str, force: bool = False) -> None:
+    """Forward-looking weekly post: which assets sit closest to a decision level,
+    with the broad backdrop. Built entirely from data the pipeline already fetches."""
+    if not force and datetime.now(ROME).weekday() != config.WHAT_TO_WATCH_WEEKDAY:
+        print("Not the what-to-watch scheduled day; skipping.")
+        return
+    if not force and _slot_already_posted_week(state, "what_to_watch"):
+        print("This week's what-to-watch was already posted; skipping duplicate.")
+        return
+
+    timeframe = config.DEEP_DIVE_TIMEFRAME
+    candidates = []
+    for asset in config.ASSETS:
+        try:
+            frame = indicators.enrich(
+                data_fetcher.fetch_asset_klines(asset, timeframe, config.CANDLE_LIMIT)
+            )
+            levels = indicators.find_key_levels(frame)
+            price = float(frame["Close"].iloc[-1])
+            proximity = indicators.level_proximity(price, levels)
+            candidates.append({
+                "ticker": asset["ticker"],
+                "price": price,
+                "rsi": float(frame["rsi"].iloc[-1]),
+                "trend": indicators.trend_state(frame),
+                **proximity,
+            })
+        except Exception as exc:
+            print(f"Skipping {asset['ticker']} in what-to-watch: {exc}", file=sys.stderr)
+        time.sleep(0.5)
+
+    if not candidates:
+        raise RuntimeError("No assets could be evaluated for the what-to-watch post")
+
+    # Flag genuine decision points first (near a level or momentum stretched);
+    # if too few qualify, just take the assets nearest a level so the post is
+    # never empty. Either way, rank by imminence and cap the list.
+    def _is_watchworthy(row: dict) -> bool:
+        return (abs(row["distance_pct"]) <= config.WATCH_LEVEL_PROXIMITY_PCT
+                or row["rsi"] >= config.RSI_OVERBOUGHT
+                or row["rsi"] <= config.RSI_OVERSOLD)
+
+    flagged = [row for row in candidates if _is_watchworthy(row)]
+    ranked = sorted(flagged or candidates, key=lambda row: abs(row["distance_pct"]))
+    watch_rows = ranked[: config.WATCH_MAX_ITEMS]
+
+    backdrop = _watch_backdrop(state)
+    chart_path = chart_generator.generate_watchlist_chart(watch_rows)
+    caption = narrative_generator.generate_what_to_watch(watch_rows, backdrop)
+    _publish(chat_id, [chart_path], caption)
+    _mark_slot_week(state, "what_to_watch")
+    print(f"Posted what-to-watch ({len(watch_rows)} assets flagged).")
+
+
 # Maps each GitHub Actions cron string (github.event.schedule, UTC) to its content slot.
 CRON_MODE_MAP = {
     "10 */4 * * *": "alerts",
@@ -549,6 +664,8 @@ CRON_MODE_MAP = {
     "15 8 * * *": "daily_pulse",
     "15 12 * * *": "deep_dive",
     "15 16 * * 0": "weekly_digest",
+    "15 16 * * 6": "signal_scorecard",
+    "15 6 * * 1": "what_to_watch",
     "15 20 * * 1-5": "macro_close",
     "15 21 * * 1-5": "macro_close",
 }
@@ -575,7 +692,8 @@ def run(mode: str = "auto", force: bool = False) -> None:
     chat_id = _require_env("TELEGRAM_CHANNEL")
     resolved = _automatic_mode() if mode == "auto" else mode
     modes = (
-        ["market_map", "daily_pulse", "deep_dive", "macro_close", "weekly_digest"]
+        ["market_map", "daily_pulse", "deep_dive", "macro_close", "weekly_digest",
+         "signal_scorecard", "what_to_watch"]
         if resolved == "all" else [resolved]
     )
     handlers = {
@@ -585,6 +703,8 @@ def run(mode: str = "auto", force: bool = False) -> None:
         "alerts": run_alert_scan,
         "daily_pulse": run_daily_pulse,
         "weekly_digest": run_weekly_digest,
+        "signal_scorecard": run_signal_scorecard,
+        "what_to_watch": run_what_to_watch,
     }
 
     try:
@@ -613,7 +733,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         choices=("auto", "market_map", "deep_dive", "macro_close", "alerts",
-                 "daily_pulse", "weekly_digest", "all"),
+                 "daily_pulse", "weekly_digest", "signal_scorecard", "what_to_watch", "all"),
         default=os.environ.get("POST_MODE", "auto"),
     )
     parser.add_argument("--force", action="store_true", help="republish even if today's slot is recorded")

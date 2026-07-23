@@ -14,6 +14,7 @@ import data_fetcher
 import indicators
 import main
 import narrative_generator
+import signal_record
 
 
 def synthetic_market(candles: int = 241) -> pd.DataFrame:
@@ -165,6 +166,78 @@ class ExtendedTargetTests(unittest.TestCase):
         self.assertIsNone(indicators.find_extended_target(frame, "long", entry=100.0, stop=100.0))
 
 
+class SetupVerdictTests(unittest.TestCase):
+    def test_clean_trend_beats_transitioning(self):
+        analyses = [
+            {"ticker": "BTC", "trend": "bullish: aligned", "rsi": 62.0},
+            {"ticker": "SOL", "trend": "mixed/transitioning: no agreement", "rsi": 50.0},
+        ]
+        verdict = indicators.compare_setups(analyses)
+        self.assertIn("BTC", verdict)
+        self.assertIn("cleaner structure", verdict)
+
+    def test_two_muddled_setups_report_no_clean_structure(self):
+        analyses = [
+            {"ticker": "BTC", "trend": "mixed/transitioning: no agreement", "rsi": 50.0},
+            {"ticker": "SOL", "trend": "mixed/transitioning: no agreement", "rsi": 49.0},
+        ]
+        verdict = indicators.compare_setups(analyses)
+        self.assertIn("transition", verdict)
+
+    def test_level_proximity_picks_nearer_side(self):
+        near_resistance = indicators.level_proximity(99.0, {"support": 80.0, "resistance": 100.0})
+        self.assertEqual(near_resistance["level_type"], "resistance")
+        self.assertGreater(near_resistance["distance_pct"], 0)
+        near_support = indicators.level_proximity(82.0, {"support": 80.0, "resistance": 120.0})
+        self.assertEqual(near_support["level_type"], "support")
+
+
+class SignalRecordTests(unittest.TestCase):
+    def _write_log(self, records):
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, "posts_log.jsonl")
+        import json
+        with open(path, "w") as f:
+            for record in records:
+                f.write(json.dumps(record) + "\n")
+        return path
+
+    def test_scorecard_counts_wins_losses_and_best_worst(self):
+        path = self._write_log([
+            {"mode": "signal_open", "ticker": "BTC"},
+            {"mode": "signal_close", "ticker": "BTC", "outcome": "target", "r_multiple": 3.2},
+            {"mode": "market_map"},
+            {"mode": "signal_close", "ticker": "ETH", "outcome": "stop", "r_multiple": -1.0},
+            {"mode": "signal_close", "ticker": "SOL", "outcome": "target", "r_multiple": 4.5},
+        ])
+        card = signal_record.load_scorecard(open_count=2, path=path)
+        self.assertEqual(card["closed_count"], 3)
+        self.assertEqual(card["win_count"], 2)
+        self.assertEqual(card["loss_count"], 1)
+        self.assertAlmostEqual(card["win_rate_pct"], 200 / 3)
+        self.assertAlmostEqual(card["avg_r"], (3.2 - 1.0 + 4.5) / 3)
+        self.assertEqual(card["best"]["ticker"], "SOL")
+        self.assertEqual(card["worst"]["ticker"], "ETH")
+        self.assertEqual(card["open_count"], 2)
+
+    def test_include_folds_in_an_unlogged_close(self):
+        path = self._write_log([
+            {"mode": "signal_close", "ticker": "BTC", "outcome": "target", "r_multiple": 3.0},
+        ])
+        card = signal_record.load_scorecard(
+            open_count=0, path=path,
+            include={"ticker": "ETH", "outcome": "stop", "r_multiple": -1.0},
+        )
+        self.assertEqual(card["closed_count"], 2)
+        self.assertEqual(card["win_count"], 1)
+
+    def test_missing_log_is_empty_record(self):
+        card = signal_record.load_scorecard(open_count=3, path="/tmp/does_not_exist_xyz.jsonl")
+        self.assertEqual(card["closed_count"], 0)
+        self.assertIsNone(card["win_rate_pct"])
+        self.assertIn("first hypothetical scenario", signal_record.format_record_line(card))
+
+
 class SchedulingTests(unittest.TestCase):
     def test_universe_has_ten_unique_non_stablecoin_assets(self):
         tickers = [asset["ticker"] for asset in config.ASSETS]
@@ -195,6 +268,8 @@ class SchedulingTests(unittest.TestCase):
             "15 8 * * *": "daily_pulse",
             "15 12 * * *": "deep_dive",
             "15 16 * * 0": "weekly_digest",
+            "15 16 * * 6": "signal_scorecard",
+            "15 6 * * 1": "what_to_watch",
             "15 20 * * 1-5": "macro_close",
             "15 21 * * 1-5": "macro_close",
         }
@@ -314,6 +389,50 @@ class NarrativeTests(unittest.TestCase):
         self.assertIn("+2.00R", result)
         self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMER))
 
+    def test_signal_outcome_appends_record_line(self):
+        result = narrative_generator.generate_signal_outcome(
+            "ETH", "1d", "long", 1800.0, 1900.0, "target", 2.0, "2026-01-01T00:00:00",
+            record_line="📊 Track record so far: 3 scenarios closed",
+        )
+        self.assertIn("Track record so far", result)
+
+    def test_signal_scorecard_falls_back_and_teaches(self):
+        scorecard = {
+            "closed_count": 3, "win_count": 2, "loss_count": 1, "win_rate_pct": 66.7,
+            "avg_r": 1.2, "total_r": 3.6, "open_count": 4,
+            "best": {"ticker": "SOL", "r_multiple": 4.5},
+            "worst": {"ticker": "ETH", "r_multiple": -1.0},
+        }
+        with patch.object(narrative_generator, "_client", side_effect=RuntimeError("no network in tests")):
+            result = narrative_generator.generate_signal_scorecard(scorecard)
+        self.assertIn("SCORECARD", result)
+        self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMER))
+
+    def test_signal_scorecard_empty_state(self):
+        scorecard = {
+            "closed_count": 0, "win_count": 0, "loss_count": 0, "win_rate_pct": None,
+            "avg_r": 0.0, "total_r": 0.0, "open_count": 2, "best": None, "worst": None,
+        }
+        with patch.object(narrative_generator, "_client", side_effect=RuntimeError("no network in tests")):
+            result = narrative_generator.generate_signal_scorecard(scorecard)
+        self.assertIn("SCORECARD", result)
+        self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMER))
+
+    def test_what_to_watch_falls_back_without_network(self):
+        watch_rows = [
+            {"ticker": "BTC", "level_type": "resistance", "distance_pct": 2.1, "rsi": 68.0,
+             "trend": "bullish: aligned", "price": 65000.0},
+            {"ticker": "SOL", "level_type": "support", "distance_pct": 1.4, "rsi": 32.0,
+             "trend": "bearish: aligned", "price": 76.0},
+        ]
+        backdrop = {"dominance_note": "BTC dominance has been rising",
+                    "fear_greed": {"value": 30, "classification": "Fear"}}
+        with patch.object(narrative_generator, "_client", side_effect=RuntimeError("no network in tests")):
+            result = narrative_generator.generate_what_to_watch(watch_rows, backdrop)
+        self.assertIn("WHAT TO WATCH", result)
+        self.assertIn("BTC", result)
+        self.assertTrue(result.endswith(config.DISCLAIMER))
+
 
 class ChartTests(unittest.TestCase):
     def test_technical_headline_describes_structure(self):
@@ -422,6 +541,49 @@ class ChartTests(unittest.TestCase):
             liquidity_image = mpimg.imread(liquidity_path)
         self.assertGreater(structure_image.shape[1] / structure_image.shape[0], 1.4)
         self.assertGreater(liquidity_image.shape[1] / liquidity_image.shape[0], 1.4)
+
+    def test_signal_scorecard_chart_renders_with_closed_signals(self):
+        scorecard = {
+            "closed_count": 3, "win_count": 2, "loss_count": 1, "win_rate_pct": 66.7,
+            "avg_r": 1.2, "total_r": 3.6, "open_count": 4,
+            "best": {"ticker": "SOL", "r_multiple": 4.5},
+            "worst": {"ticker": "ETH", "r_multiple": -1.0},
+        }
+        closed = [
+            {"ticker": "BTC", "outcome": "target", "r_multiple": 3.2},
+            {"ticker": "ETH", "outcome": "stop", "r_multiple": -1.0},
+            {"ticker": "SOL", "outcome": "target", "r_multiple": 4.5},
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
+            path = chart_generator.generate_signal_scorecard_chart(scorecard, closed)
+            image = mpimg.imread(path)
+        self.assertTrue(os.path.basename(path).startswith("signal_scorecard"))
+        self.assertGreater(image.shape[1] / image.shape[0], 1.2)
+
+    def test_signal_scorecard_chart_renders_empty_state(self):
+        scorecard = {
+            "closed_count": 0, "win_count": 0, "loss_count": 0, "win_rate_pct": None,
+            "avg_r": 0.0, "total_r": 0.0, "open_count": 2, "best": None, "worst": None,
+        }
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
+            path = chart_generator.generate_signal_scorecard_chart(scorecard, [])
+            image = mpimg.imread(path)
+        self.assertGreater(image.shape[1] / image.shape[0], 1.2)
+
+    def test_watchlist_chart_renders(self):
+        rows = [
+            {"ticker": "BTC", "level_type": "resistance", "distance_pct": 2.1, "rsi": 68.0,
+             "trend": "bullish: aligned", "price": 65000.0},
+            {"ticker": "SOL", "level_type": "support", "distance_pct": 1.4, "rsi": 32.0,
+             "trend": "bearish: aligned", "price": 76.0},
+            {"ticker": "ETH", "level_type": "resistance", "distance_pct": 3.8, "rsi": 55.0,
+             "trend": "mixed/transitioning: no agreement", "price": 1900.0},
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
+            path = chart_generator.generate_watchlist_chart(rows)
+            image = mpimg.imread(path)
+        self.assertTrue(os.path.basename(path).startswith("watchlist"))
+        self.assertGreater(image.shape[1] / image.shape[0], 1.2)
 
     def test_pulse_chart_renders(self):
         derivatives_rows = [

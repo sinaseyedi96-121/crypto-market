@@ -238,6 +238,46 @@ def trend_state(df: pd.DataFrame) -> str:
     return "mixed/transitioning: EMA alignment, price position, and EMA slope do not fully agree"
 
 
+def _structure_score(trend: str, rsi: float) -> float:
+    """How decisively a single asset's structure lines up. A clean setup is one
+    where trend and momentum agree — a clean bull or a clean bear both score
+    higher than a muddled, transitioning tape. Direction-agnostic on purpose:
+    'stronger setup' means clearer, not necessarily more bullish."""
+    regime = trend.split(":", 1)[0]
+    if regime == "bullish":
+        return 2.0 + max(0.0, (rsi - 50) / 10)      # bullish trend, rewarded when RSI confirms
+    if regime == "bearish":
+        return 2.0 + max(0.0, (50 - rsi) / 10)      # bearish trend, rewarded when RSI confirms
+    return 0.0                                       # mixed/transitioning: no clear structure
+
+
+def compare_setups(analyses: list[dict]) -> str:
+    """A deterministic one-line verdict for a two-asset deep dive, answering the
+    'which has the stronger setup?' the headline poses. Ranks each asset on how
+    cleanly its trend and momentum agree (see _structure_score)."""
+    scored = [(_structure_score(a["trend"], a["rsi"]), a) for a in analyses]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    (top_score, top), (next_score, _) = scored[0], scored[1]
+    if top_score == 0.0:
+        return "On trend and momentum, both are still in transition with no clean structure yet"
+    if abs(top_score - next_score) < 0.5:
+        return "On trend and momentum, both setups look comparably balanced right now"
+    return f"On trend and momentum alignment, {top['ticker']} shows the cleaner structure right now"
+
+
+def level_proximity(price: float, levels: dict) -> dict:
+    """Distance from a confirmed close to the nearer of its two key levels, as a
+    signed percentage. Used by the weekly 'what to watch' post to surface which
+    assets sit closest to a decision point a break or bounce would resolve."""
+    support = levels["support"]
+    resistance = levels["resistance"]
+    to_resistance = (resistance - price) / price * 100 if price else 0.0
+    to_support = (price - support) / price * 100 if price else 0.0
+    if abs(to_resistance) <= abs(to_support):
+        return {"level_type": "resistance", "level": resistance, "distance_pct": to_resistance}
+    return {"level_type": "support", "level": support, "distance_pct": to_support}
+
+
 def summarize_for_prompt(df: pd.DataFrame, levels: dict) -> str:
     """Turns the last row of indicators into a compact text block for the LLM."""
     last = df.iloc[-1]

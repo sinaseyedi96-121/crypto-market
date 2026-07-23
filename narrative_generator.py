@@ -8,66 +8,97 @@ import re
 from openai import OpenAI
 
 import config
+import indicators
 
 
-SYSTEM_PROMPT = """You are a careful crypto market analyst writing educational market commentary for Telegram.
+# Every post ships as a photo (or album) plus this caption. The chart already
+# carries the exact figures, so the caption's job is to explain what the picture
+# means and teach one idea — not to restate numbers the reader can already see.
+_EDUCATIONAL_RULES = (
+    "The chart posted alongside your text already shows every exact number. Do NOT restate raw "
+    "figures — no prices, percentages, RSI readings, or index values. Instead explain, in plain "
+    "language, what the current picture means and why it matters, and teach the reader one idea "
+    "they can reuse. Refer to levels and momentum qualitatively (for example 'pressing against its "
+    "recent ceiling' or 'momentum has cooled from stretched levels'). Use only what the context "
+    "supports; never invent a fact. Never tell readers to buy, sell, enter, exit, hold, or set "
+    "stops or targets, and never predict a specific price. Write clear English an intelligent "
+    "beginner could follow. Keep the response under 850 characters."
+)
 
-Write a richer but still concise overview using 7 or 8 short lines. Every line must start directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or extra emoji decoration. Do not insert blank lines; the application adds spacing later.
+_FORMAT_RULES = (
+    "Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, "
+    "numbered lists, headings, markdown, or blank lines; the application adds spacing later."
+)
 
-Use this order:
-📈, 📉, or ➡️ overall trend, with the exact technical reason
-💰 confirmed closing price and timeframe
-⚡ RSI and MACD momentum, including whether MACD is above or below zero when relevant
-📊 ATR and Bollinger volatility, using their percentages and historical percentiles
-🎯 support and resistance, noting repeated pivot touches when useful
-👀 one conditional sentence explaining what a confirmed close beyond either level would technically change
-Fear & Greed on its own line when supplied, using 😱 Extreme Fear, 😨 Fear, 😐 Neutral, 🙂 Greed, or 🤑 Extreme Greed
-🕒 confirmed candle close time in UTC and Binance as the price source
 
-Rules:
-Use only facts and numbers in the supplied context. Never calculate or invent missing values.
-Distinguish trend from short term momentum when they disagree.
-Never tell readers to buy, sell, enter, exit, hold, or set stop loss or take profit levels.
-Do not predict a future price or promise an outcome.
-Write clear natural English for a general audience.
-Keep the response below 850 characters.
+SYSTEM_PROMPT = f"""You are a careful crypto market educator writing for a general Telegram audience about a single asset's chart.
+
+Write 6 to 8 short lines. {_FORMAT_RULES}
+
+{_EDUCATIONAL_RULES}
+
+Cover, in a natural order: what the trend structure is doing and what that implies; whether momentum agrees with or diverges from the trend, and what such agreement or divergence tends to signal; whether volatility is expanding or contracting and why that matters for what may come next; where the key levels sit and what a decisive break or hold of them would actually mean; and the market's fear or greed mood when supplied. Distinguish trend from short-term momentum when they disagree.
 """
 
-COMPARISON_PROMPT = """You write concise educational crypto commentary for a Telegram chart album containing two assets.
+COMPARISON_PROMPT = f"""You write educational crypto commentary for a Telegram album comparing two assets, shown as two charts side by side.
 
-Write 7 or 8 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
+Write 7 or 8 short lines. {_FORMAT_RULES}
 
-Give each asset one trend line and one momentum line. Then compare their volatility, state both confirmed closes, summarize both support/resistance zones, add one conditional line about confirmed level breaks, include Fear & Greed when supplied, and finish with the candle close time and data sources.
+{_EDUCATIONAL_RULES}
 
-Use only supplied facts. Distinguish trend from momentum. Never advise buying, selling, holding, entries, exits, stop losses, or targets. Do not predict prices. Keep the response below 850 characters.
+Open with the supplied verdict line stating which asset has the cleaner setup and why. Then give each asset a plain-language read of its trend and momentum, compare which is calmer or more volatile and what that implies, explain what a decisive break of each asset's key zone would signal, include the fear or greed mood when supplied, and teach one comparative idea such as why relative strength between two assets matters. Distinguish trend from momentum.
 """
 
-MARKET_MAP_PROMPT = """You write a concise daily crypto market map for Telegram.
+MARKET_MAP_PROMPT = f"""You write a daily crypto market map for Telegram, shown with a ranked performance chart of the tracked majors.
 
-Write 6 or 7 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
+Write 6 or 7 short lines. {_FORMAT_RULES}
 
-Cover overall breadth, strongest and weakest assets, BTC and ETH, market leadership, Fear & Greed when supplied, and finish with the source. Use only supplied facts. Do not give trade instructions or predict prices. Keep the response below 850 characters.
+{_EDUCATIONAL_RULES}
+
+Explain the day's story rather than listing movers: is this broad strength, broad weakness, or a split and rotation, and what that breadth says about the market's character; which corner led and which lagged and what that rotation hints at; how the majors are behaving relative to the rest; and the fear or greed mood when supplied. Teach one idea about reading market breadth.
 """
 
-MACRO_PROMPT = """You write concise educational macro context for a crypto audience on Telegram.
+MACRO_PROMPT = f"""You write educational macro context for a crypto audience on Telegram, shown with a chart of the S&P 500 and the Federal Reserve broad U.S. dollar index.
 
-Write 6 or 7 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
+Write 6 or 7 short lines. {_FORMAT_RULES}
 
-Cover the S&P 500, the Federal Reserve broad U.S. dollar index, BTC dominance, and the relationship between risk assets, dollar strength, and crypto without claiming causation. Clearly call the dollar series the Fed broad dollar index, not DXY. When supplied, also mention the VIX, the 10-year minus 2-year Treasury yield spread, and BTC's rolling correlation with the S&P 500 and the dollar index, purely as descriptive facts. Use only supplied facts. Never give trade instructions or predict prices. Finish with data-source dates. Keep the response below 850 characters.
+{_EDUCATIONAL_RULES}
+
+Explain what the current mix of stocks, the dollar, equity volatility, the yield curve, and BTC's correlations means for the risk backdrop crypto trades within — without claiming one causes another. Always call the dollar series the Fed broad dollar index, not DXY. Teach one idea about why the dollar, interest rates, or equity volatility matter to crypto.
 """
 
-DAILY_PULSE_PROMPT = """You write a concise daily derivatives and sentiment pulse for a crypto Telegram audience.
+DAILY_PULSE_PROMPT = f"""You write a daily derivatives and sentiment pulse for a crypto Telegram audience, shown with a funding-rate and open-interest chart.
 
-Write 6 or 7 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
+Write 6 or 7 short lines. {_FORMAT_RULES}
 
-Cover perpetual funding rates and what a positive or negative rate implies about leveraged positioning, open interest levels, and any notable trending coins supplied. Use only supplied facts. Never give trade instructions, never predict prices, and do not tell readers to open or close positions. Keep the response below 850 characters.
+{_EDUCATIONAL_RULES}
+
+Explain what the positioning means: what positive versus negative funding says about whether longs or shorts are crowded and paying to hold; what the level of open interest implies about how much leverage sits in the system and why that can amplify moves; and what any trending coins reflect about where attention is going. Teach one idea about reading derivatives positioning.
 """
 
-WEEKLY_DIGEST_PROMPT = """You write a concise weekly crypto market digest for Telegram, covering a chart album of four images: a 7-day performance ranking, a technical scoreboard (RSI and volatility), a market-structure chart (BTC dominance and Fear & Greed over time), and a liquidity chart (total and stablecoin market cap over time).
+WEEKLY_DIGEST_PROMPT = f"""You write a weekly crypto digest for Telegram, shown with a four-chart album: a 7-day performance ranking, an RSI and volatility scoreboard, a BTC-dominance and Fear & Greed trend, and a total and stablecoin market-cap trend.
 
-Write 8 or 9 short lines. Every line starts directly with one relevant emoji. Do not use hyphens, bullet characters, numbered lists, headings, markdown, or blank lines.
+Write 8 or 9 short lines. {_FORMAT_RULES}
 
-Cover the week's strongest and weakest performers, any RSI extremes (overbought or oversold) and the most volatile asset, how BTC dominance moved over the window, how Fear & Greed moved over the window, and how total and stablecoin market cap moved over the window. Use only supplied facts. Never give trade instructions or predict prices. Keep the response below 850 characters.
+{_EDUCATIONAL_RULES}
+
+Tell the week's story: who led and who lagged and what that rotation suggests; where momentum ran hot or cold across the board; how BTC dominance and the fear or greed mood shifted and what that says about risk appetite; and whether capital moved into or out of the market and toward or away from stablecoins waiting on the sidelines. Teach one idea about reading market structure over a week.
+"""
+
+SIGNAL_SCORECARD_PROMPT = f"""You write an educational weekly review of a crypto channel's hypothetical, educational trade scenarios, shown with a track-record scorecard chart.
+
+Write 6 or 7 short lines. {_FORMAT_RULES}
+
+The chart already shows the exact win rate, average R multiple, and each scenario's result. Do NOT restate those numbers. Instead explain honestly what the record shows and, above all, teach: what a reward-to-risk (R) multiple actually means, why a method can be profitable even when it is wrong more often than right and vice versa, why publishing losing scenarios alongside winning ones is the honest way to learn, and that a small sample proves very little. Frame everything as hypothetical and educational, never as advice or a promise of future results. Use only supplied facts; never invent a number. Keep the response under 850 characters.
+"""
+
+WHAT_TO_WATCH_PROMPT = f"""You write a forward-looking educational 'what to watch this week' post for a crypto Telegram audience, shown with a chart of which assets sit closest to a key level.
+
+Write 6 or 7 short lines. {_FORMAT_RULES}
+
+{_EDUCATIONAL_RULES}
+
+Explain why each highlighted asset is worth watching: what a decisive break or hold of the level it is approaching would actually signal, and what a stretched or washed-out momentum reading tends to precede — a pause or shakeout, not an automatic reversal. Add the broad backdrop when supplied: the direction of BTC dominance, the fear or greed mood, and whether leverage looks crowded, and what each implies for the week. Teach one idea about watching decision levels rather than chasing price. This is educational context, not a forecast.
 """
 
 
@@ -105,7 +136,8 @@ def _fit_caption(body: str, disclaimer: str = config.DISCLAIMER) -> str:
     return "\n\n".join(kept) + disclaimer
 
 
-def _complete(system_prompt: str, context: str, headline: str, fallback: str) -> str:
+def _complete(system_prompt: str, context: str, headline: str, fallback: str,
+              disclaimer: str = config.DISCLAIMER) -> str:
     """Always return a useful titled caption, even if the model returns no text."""
     body = ""
     try:
@@ -124,7 +156,7 @@ def _complete(system_prompt: str, context: str, headline: str, fallback: str) ->
 
     if len(body) < 20:
         body = fallback
-    return _fit_caption(f"{headline}\n\n{body}")
+    return _fit_caption(f"{headline}\n\n{body}", disclaimer)
 
 
 def _price(value: float) -> str:
@@ -177,7 +209,11 @@ def generate_narrative(symbol: str, timeframe: str, indicator_summary: str,
 
 
 def generate_comparison(analyses: list[dict], fear_greed: dict | None) -> str:
-    sections = []
+    verdict = indicators.compare_setups(analyses)
+    sections = [
+        "Verdict (state this as the opening line of your reply, in your own words): "
+        + verdict
+    ]
     for analysis in analyses:
         sections.append(
             f"Asset: {analysis['ticker']}\nTimeframe: {analysis['timeframe']}\n{analysis['summary']}"
@@ -189,12 +225,11 @@ def generate_comparison(analyses: list[dict], fear_greed: dict | None) -> str:
     first, second = analyses
     sentiment = _sentiment_line(fear_greed)
     fallback_lines = [
-        f"📊 {first['ticker']} structure is {first['trend'].split(':', 1)[0]} with RSI at {first['rsi']:.1f}",
-        f"📊 {second['ticker']} structure is {second['trend'].split(':', 1)[0]} with RSI at {second['rsi']:.1f}",
-        f"💰 Confirmed closes: {first['ticker']} {_price(first['price'])} · {second['ticker']} {_price(second['price'])}",
-        f"🎯 {first['ticker']} support {_price(first['levels']['support'])} · resistance {_price(first['levels']['resistance'])}",
-        f"🎯 {second['ticker']} support {_price(second['levels']['support'])} · resistance {_price(second['levels']['resistance'])}",
-        "👀 A confirmed close beyond either highlighted zone would change the current structure",
+        f"📊 {verdict}",
+        f"🧭 {first['ticker']} is {first['trend'].split(':', 1)[0]} while {second['ticker']} is {second['trend'].split(':', 1)[0]}",
+        "⚡ Watch whether momentum keeps confirming each trend or starts to diverge from it",
+        "👀 A confirmed close beyond either asset's highlighted zone is what would change its structure",
+        "📚 Comparing two charts side by side is really a read on relative strength: which one leads when both move",
     ]
     if sentiment:
         fallback_lines.append(sentiment)
@@ -444,8 +479,10 @@ def generate_signal_post(ticker: str, timeframe: str, direction: str, entry: flo
 
 def generate_signal_outcome(ticker: str, timeframe: str, direction: str, entry: float,
                              exit_price: float, outcome: str, r_multiple: float,
-                             close_time: str) -> str:
-    """Deterministic factual close-out for a previously posted hypothetical scenario."""
+                             close_time: str, record_line: str | None = None) -> str:
+    """Deterministic factual close-out for a previously posted hypothetical
+    scenario. `record_line`, when supplied, appends the running track record so
+    each close reinforces the scorecard rather than reading as an isolated result."""
     result_emoji = "✅" if outcome == "target" else "🛑"
     label = "TARGET HIT" if outcome == "target" else "STOP HIT"
     body = (
@@ -454,5 +491,89 @@ def generate_signal_outcome(ticker: str, timeframe: str, direction: str, entry: 
         f"📐 Result: {r_multiple:+.2f}R\n\n"
         f"🕒 Confirmed {timeframe.upper()} close · {close_time[:16]} UTC"
     )
+    if record_line:
+        body += f"\n\n{record_line}"
     headline = f"📊 {ticker} HYPOTHETICAL SCENARIO CLOSED: {label}"
     return _fit_caption(f"{headline}\n\n{body}", config.SIGNAL_DISCLAIMER)
+
+
+def generate_signal_scorecard(scorecard: dict) -> str:
+    """Weekly educational review of the hypothetical-signal track record. The
+    scorecard chart carries the exact figures; the caption teaches what they mean."""
+    total = scorecard["closed_count"]
+    if not total:
+        context = (
+            "No hypothetical scenarios have reached their target or stop yet.\n"
+            f"Scenarios still open: {scorecard['open_count']}."
+        )
+        fallback = (
+            "📊 No hypothetical scenarios have closed yet, so there is no record to score\n\n"
+            "🧭 Every scenario is defined in advance with a fixed entry, target and stop, then left to play out untouched\n\n"
+            "📚 Reward to risk, written as R, compares what a scenario aimed to gain against what it put at risk\n\n"
+            "👀 The scorecard fills in as scenarios close, wins and losses alike"
+        )
+    else:
+        parts = [
+            f"Closed scenarios: {total}",
+            f"Reached target: {scorecard['win_count']}",
+            f"Hit stop: {scorecard['loss_count']}",
+            f"Win rate: {scorecard['win_rate_pct']:.0f}%",
+            f"Average R multiple: {scorecard['avg_r']:+.2f}",
+            f"Cumulative R: {scorecard['total_r']:+.2f}",
+            f"Scenarios still open: {scorecard['open_count']}",
+        ]
+        if scorecard["best"]:
+            parts.append(f"Best result: {scorecard['best']['ticker']} {scorecard['best']['r_multiple']:+.2f}R")
+        if scorecard["worst"]:
+            parts.append(f"Worst result: {scorecard['worst']['ticker']} {scorecard['worst']['r_multiple']:+.2f}R")
+        context = "\n".join(parts)
+        fallback = (
+            "📊 Here is how the hypothetical scenarios have played out so far\n\n"
+            "📚 R measures reward against risk: a method can still come out ahead while being wrong more often than right, if its wins run larger than its losses\n\n"
+            "⚖️ Showing the losing scenarios next to the winning ones is the only honest way to judge an approach\n\n"
+            "🔬 A handful of results proves little on its own; the value is in the repeatable discipline, not any single outcome\n\n"
+            "👀 New scenarios open after deep dives and close when they reach target or stop"
+        )
+    return _complete(
+        SIGNAL_SCORECARD_PROMPT,
+        context,
+        "🧪 HYPOTHETICAL SIGNAL SCORECARD",
+        fallback,
+        config.SIGNAL_DISCLAIMER,
+    )
+
+
+def generate_what_to_watch(watch_rows: list[dict], backdrop: dict | None = None) -> str:
+    """Forward-looking weekly post: which assets sit closest to a decision level,
+    plus the broad backdrop. The chart shows the distances; the caption explains
+    what a break or hold would mean."""
+    backdrop = backdrop or {}
+    lines = ["Assets closest to a key decision level, from confirmed daily candles:"]
+    for row in watch_rows:
+        side = "below its resistance" if row["level_type"] == "resistance" else "above its support"
+        lines.append(
+            f"{row['ticker']}: {row['trend'].split(':', 1)[0]} trend, RSI {row['rsi']:.0f}, "
+            f"closing about {abs(row['distance_pct']):.1f}% {side}"
+        )
+    if backdrop.get("dominance_note"):
+        lines.append(backdrop["dominance_note"])
+    fear_greed = backdrop.get("fear_greed")
+    if fear_greed:
+        lines.append(f"Fear and Greed mood: {fear_greed['classification']} ({fear_greed['value']}/100)")
+    if backdrop.get("funding_note"):
+        lines.append(backdrop["funding_note"])
+
+    watch_tickers = ", ".join(row["ticker"] for row in watch_rows) or "the tracked majors"
+    fallback = (
+        f"🔭 On watch this week: {watch_tickers}\n\n"
+        "🎯 Each is pressing toward a support or resistance zone, and it is a decisive close through that zone, or a clean bounce off it, that would actually change the picture\n\n"
+        "⚡ Stretched momentum tends to precede a pause or a shakeout rather than an automatic reversal\n\n"
+        "🧭 Watching how price behaves at a level teaches more than chasing it in the space between levels\n\n"
+        "🕒 Levels drawn from confirmed daily candles"
+    )
+    return _complete(
+        WHAT_TO_WATCH_PROMPT,
+        "\n".join(lines),
+        "🔭 WHAT TO WATCH THIS WEEK",
+        fallback,
+    )

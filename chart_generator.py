@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 import os
 
 import matplotlib
@@ -66,6 +67,13 @@ def _style():
             "ytick.color": MUTED,
         },
     )
+
+
+def _rotating_choice(pool: list[str], seed: int) -> str:
+    """Pick one headline from a pool, deterministically but varying day to day so
+    a market that stays in the same regime for a stretch doesn't repeat the exact
+    same headline every session."""
+    return pool[int(seed) % len(pool)]
 
 
 def _display_symbol(symbol: str, quote: str = "USDT") -> str:
@@ -308,11 +316,18 @@ def _ranked_change_chart(snapshot: list[dict], change_key: str, out_name: str,
     strongest = max(snapshot, key=lambda row: row[change_key])
     weakest = min(snapshot, key=lambda row: row[change_key])
     if advancing >= 8:
-        headline = "BROAD CRYPTO RALLY: BUYERS TAKE CONTROL"
+        pool = ["BROAD CRYPTO RALLY: BUYERS TAKE CONTROL",
+                "GREEN ACROSS THE BOARD AS BUYERS STEP IN",
+                "BROAD STRENGTH: MOST MAJORS ADVANCE"]
     elif advancing <= 2:
-        headline = "MARKET SELLOFF: RED ACROSS THE BOARD"
+        pool = ["MARKET SELLOFF: RED ACROSS THE BOARD",
+                "BROAD WEAKNESS: SELLERS TAKE CONTROL",
+                "RISK COMES OFF ACROSS THE MAJORS"]
     else:
-        headline = "CRYPTO MARKET SPLITS: MOMENTUM IS SHIFTING"
+        pool = ["CRYPTO MARKET SPLITS: MOMENTUM IS SHIFTING",
+                "A SPLIT TAPE: ROTATION UNDER THE SURFACE",
+                "MIXED MARKET: LEADERS AND LAGGARDS DIVERGE"]
+    headline = _rotating_choice(pool, date.today().toordinal())
 
     fig, ax = plt.subplots(figsize=(12.8, 7.2), facecolor=BACKGROUND)
     _clean_axes(ax)
@@ -552,11 +567,18 @@ def generate_macro_chart(macro: dict) -> str:
     sp_change = _series_change(sp500, 5)
     dollar_change = _series_change(dollar, 5)
     if sp_change > 0 and dollar_change < 0:
-        headline = "RISK-ON MOMENTUM BUILDS"
+        pool = ["RISK-ON MOMENTUM BUILDS", "STOCKS FIRM AS THE DOLLAR EASES",
+                "A RISK-FRIENDLY BACKDROP TAKES SHAPE"]
     elif sp_change < 0 and dollar_change > 0:
-        headline = "DOLLAR PRESSURE HITS RISK ASSETS"
+        pool = ["DOLLAR PRESSURE HITS RISK ASSETS", "A FIRMER DOLLAR WEIGHS ON RISK",
+                "RISK TURNS DEFENSIVE AS THE DOLLAR CLIMBS"]
+    elif sp_change > 0 and dollar_change > 0:
+        pool = ["STOCKS AND THE DOLLAR CLIMB TOGETHER", "RISK AND THE DOLLAR RISE IN TANDEM"]
+    elif sp_change < 0 and dollar_change < 0:
+        pool = ["STOCKS AND THE DOLLAR EASE TOGETHER", "RISK AND THE DOLLAR SLIP IN TANDEM"]
     else:
-        headline = "WALL STREET AND THE DOLLAR DIVERGE"
+        pool = ["WALL STREET AND THE DOLLAR DIVERGE", "A MIXED, RANGE-BOUND MACRO TAPE"]
+    headline = _rotating_choice(pool, int(sp500.index[-1].toordinal()))
 
     fig, axes = plt.subplots(2, 1, figsize=(12.8, 7.2), facecolor=BACKGROUND, sharex=False)
     for ax in axes:
@@ -600,6 +622,92 @@ def generate_macro_chart(macro: dict) -> str:
         fig.text(0.91, 0.035, f"{config.CORRELATION_WINDOW}D CORRELATION WINDOW",
                  color=MUTED, fontsize=8, ha="right")
 
+    fig.savefig(out_path, dpi=config.CHART_DPI, facecolor=BACKGROUND, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+def generate_signal_scorecard_chart(scorecard: dict, closed: list[dict]) -> str:
+    """Track record of the hypothetical scenarios: one bar per closed scenario,
+    coloured by whether it reached target (win) or hit stop (loss), sized by its
+    R multiple. Empty state when nothing has closed yet."""
+    os.makedirs(config.CHART_DIR, exist_ok=True)
+    out_path = os.path.join(config.CHART_DIR, "signal_scorecard.png")
+
+    fig, ax = plt.subplots(figsize=(12.8, 7.2), facecolor=BACKGROUND)
+    _clean_axes(ax)
+
+    if not closed:
+        ax.axis("off")
+        ax.text(0.5, 0.5, "AWAITING THE FIRST CLOSED SCENARIO",
+                transform=ax.transAxes, ha="center", va="center",
+                color=MUTED, fontsize=18, fontweight="bold")
+        subtitle = f"{scorecard['open_count']} HYPOTHETICAL SCENARIO(S) CURRENTLY OPEN"
+    else:
+        tickers = [row["ticker"] for row in closed]
+        r_values = [float(row.get("r_multiple", 0.0)) for row in closed]
+        colors = [UP if row.get("outcome") == "target" else DOWN for row in closed]
+        y_values = list(range(len(closed)))
+        ax.barh(y_values, r_values, color=colors, height=0.6, alpha=0.92)
+        ax.set_yticks(y_values)
+        ax.set_yticklabels(tickers)
+        ax.axvline(0, color=MUTED, linewidth=0.9, alpha=0.7)
+        pad = max(max(abs(v) for v in r_values) * 0.04, 0.05)
+        low = min(min(r_values), 0)
+        high = max(max(r_values), 0)
+        span = max(high - low, 1)
+        ax.set_xlim(low - span * 0.20, high + span * 0.26)
+        for y, value in zip(y_values, r_values):
+            ax.text(value + (pad if value >= 0 else -pad), y, f"{value:+.2f}R",
+                    va="center", ha="left" if value >= 0 else "right",
+                    color=TEXT, fontsize=10, fontweight="bold")
+        ax.set_xlabel("RESULT IN R  ·  REWARD REALIZED PER UNIT OF RISK",
+                      color=MUTED, fontsize=9, fontweight="bold", labelpad=12)
+        win_rate = scorecard["win_rate_pct"] or 0.0
+        subtitle = (f"{scorecard['closed_count']} CLOSED · {scorecard['win_count']} REACHED TARGET "
+                    f"({win_rate:.0f}%) · AVG {scorecard['avg_r']:+.2f}R · {scorecard['open_count']} OPEN")
+
+    fig.subplots_adjust(left=0.10, right=0.94, top=0.80, bottom=0.13)
+    fig.text(0.10, 0.92, "HYPOTHETICAL SIGNAL SCORECARD", color=TEXT, fontsize=23, fontweight="bold")
+    fig.text(0.10, 0.865, subtitle, color=MUTED, fontsize=10, fontweight="bold")
+    fig.text(0.90, 0.92, "EDUCATIONAL TRACK RECORD", color=EMA_FAST, fontsize=10, fontweight="bold", ha="right")
+    fig.text(0.90, 0.865, "HYPOTHETICAL SCENARIOS · NOT ADVICE", color=MUTED, fontsize=9, ha="right")
+    fig.savefig(out_path, dpi=config.CHART_DPI, facecolor=BACKGROUND, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+def generate_watchlist_chart(rows: list[dict]) -> str:
+    """Which assets sit closest to a key level right now — the shorter the bar,
+    the nearer the decision point. Coloured by whether the near level is
+    resistance overhead or support beneath."""
+    os.makedirs(config.CHART_DIR, exist_ok=True)
+    out_path = os.path.join(config.CHART_DIR, "watchlist.png")
+
+    ordered = sorted(rows, key=lambda row: abs(row["distance_pct"]), reverse=True)
+    tickers = [row["ticker"] for row in ordered]
+    distances = [abs(row["distance_pct"]) for row in ordered]
+    colors = [RESISTANCE if row["level_type"] == "resistance" else SUPPORT for row in ordered]
+
+    fig, ax = plt.subplots(figsize=(12.8, 7.2), facecolor=BACKGROUND)
+    _clean_axes(ax)
+    ax.barh(tickers, distances, color=colors, height=0.62, alpha=0.92)
+    max_distance = max(distances) if distances else 1
+    ax.set_xlim(0, max_distance * 1.4)
+    ax.set_xlabel("DISTANCE TO NEAREST KEY LEVEL (%)", color=MUTED, fontsize=9, fontweight="bold", labelpad=12)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:.1f}%"))
+    for y, row in enumerate(ordered):
+        side = "resistance overhead" if row["level_type"] == "resistance" else "support beneath"
+        ax.text(abs(row["distance_pct"]) + max_distance * 0.02, y,
+                f"{side}  ·  RSI {row['rsi']:.0f}  ·  {row['trend'].split(':', 1)[0]}",
+                va="center", color=TEXT, fontsize=9, fontweight="bold")
+
+    fig.subplots_adjust(left=0.10, right=0.95, top=0.80, bottom=0.13)
+    fig.text(0.10, 0.92, "WHAT TO WATCH THIS WEEK", color=TEXT, fontsize=23, fontweight="bold")
+    fig.text(0.10, 0.865, "ASSETS CLOSEST TO A DECISION LEVEL · CONFIRMED DAILY CANDLES",
+             color=MUTED, fontsize=10, fontweight="bold")
+    fig.text(0.93, 0.92, "WEEK AHEAD", color=EMA_FAST, fontsize=10, fontweight="bold", ha="right")
+    fig.text(0.93, 0.865, "SOURCE · BINANCE / COINGECKO", color=MUTED, fontsize=9, ha="right")
     fig.savefig(out_path, dpi=config.CHART_DPI, facecolor=BACKGROUND, bbox_inches="tight")
     plt.close(fig)
     return out_path
