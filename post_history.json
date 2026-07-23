@@ -63,7 +63,7 @@
   },
   "_schedule": {
     "market_map": "2026-07-23",
-    "deep_dive": "2026-07-22",
+    "deep_dive": "2026-07-23",
     "macro_close": "2026-07-23",
     "daily_pulse": "2026-07-23"
   },
@@ -185,10 +185,10 @@
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 0.3245,
-      "message_id": 32,
-      "posted_at": 1784220765,
-      "candle_closed_at": "2026-07-15T23:59:59.999000"
+      "price_at_post": 0.3289,
+      "message_id": 86,
+      "posted_at": 1784817352,
+      "candle_closed_at": "2026-07-22T23:59:59.999000"
     }
   },
   "HYPEUSDT": {
@@ -209,17 +209,17 @@
     },
     "1d": {
       "levels": {
-        "support": 56.29,
-        "resistance": 68.1,
+        "support": 58.92,
+        "resistance": 63.98,
         "support_touches": 2,
-        "resistance_touches": 2,
+        "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 1.34
+        "zone_width": 1.27
       },
-      "price_at_post": 60.492358300902104,
-      "message_id": 53,
-      "posted_at": 1784475398,
-      "candle_closed_at": "2026-07-18T23:59:59.999000"
+      "price_at_post": 59.06211821722092,
+      "message_id": 86,
+      "posted_at": 1784817352,
+      "candle_closed_at": "2026-07-22T23:59:59.999000"
     }
   },
   "DOGEUSDT": {
