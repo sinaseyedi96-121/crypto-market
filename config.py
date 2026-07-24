@@ -111,6 +111,7 @@ DEEPSEEK_MAX_TOKENS = 500
 
 # ---- Telegram ----
 TELEGRAM_CAPTION_LIMIT = 1024              # Telegram's hard cap on photo captions
+CHANNEL_URL = "https://t.me/cryptomarket_bit"
 
 # ---- Chart ----
 CHART_DISPLAY_CANDLES = 120                # calculate on all candles, render only the recent view
@@ -134,4 +135,7 @@ CHART_DIR = "charts"
 STATE_FILE = "post_history.json"
 
 # ---- Mandatory footer appended in code (not left to the model to remember) ----
-DISCLAIMER = "\n\n⚠️ Educational content, not financial advice."
+# A clickable follow link back to the channel, so a forwarded/reposted caption
+# still drives people back to the source. Rendered via Telegram's HTML parse
+# mode (see telegram_publisher.py), so caption bodies are HTML-escaped first.
+DISCLAIMER = f'\n\n<a href="{CHANNEL_URL}">🔔 Follow</a>'

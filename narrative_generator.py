@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import os
 import re
 
@@ -122,7 +123,14 @@ def _format_for_telegram(text: str) -> str:
 
 
 def _fit_caption(body: str, disclaimer: str = config.DISCLAIMER) -> str:
-    """Keep complete lines and reserve room for the mandatory disclaimer."""
+    """Keep complete lines and reserve room for the mandatory disclaimer.
+
+    The disclaimer/footer carries a raw HTML link and every caption is sent
+    with Telegram's HTML parse mode, so the body must be HTML-escaped here —
+    the one place every caption passes through — or a stray '&', '<', or '>'
+    in generated text (e.g. "S&P 500") would break entity parsing on send.
+    """
+    body = html.escape(body, quote=False)
     limit = config.TELEGRAM_CAPTION_LIMIT - len(disclaimer)
     if len(body) <= limit:
         return body + disclaimer
@@ -259,21 +267,32 @@ def generate_market_map(snapshot: list[dict], fear_greed: dict | None) -> str:
     weakest = ordered[-1]
     if advancing >= 8:
         headline = "🚀 CRYPTO MARKET SURGE: BUYERS TAKE CONTROL"
+        breadth_read = "a broadly bullish tape with buyers in control almost everywhere"
     elif advancing <= 2:
         headline = "🚨 CRYPTO MARKET FLASHES RED"
+        breadth_read = "a broadly bearish tape with sellers pressing almost everywhere"
     else:
         headline = "⚡ CRYPTO MARKET SPLITS: MOMENTUM IS SHIFTING"
+        breadth_read = "a split, rotational session rather than one clear direction"
+
     fallback_lines = [
-        f"📊 Breadth: {advancing} {'asset' if advancing == 1 else 'assets'} advancing and {len(snapshot) - advancing} declining",
-        f"🚀 Leader: {strongest['ticker']} {strongest['change_24h']:+.2f}% at {_price(strongest['price'])}",
-        f"🔻 Weakest: {weakest['ticker']} {weakest['change_24h']:+.2f}% at {_price(weakest['price'])}",
+        f"📊 Breadth: {advancing} {'asset' if advancing == 1 else 'assets'} advancing against "
+        f"{len(snapshot) - advancing} declining, {breadth_read}",
+        f"🔀 {strongest['ticker']} leads the pack while {weakest['ticker']} lags furthest behind, "
+        "a rotation worth watching for whether it persists or reverses",
     ]
     by_ticker = {row["ticker"]: row for row in snapshot}
-    for ticker, emoji in (("BTC", "🟠"), ("ETH", "🔵")):
-        row = by_ticker.get(ticker)
-        if row:
+    btc_row, eth_row = by_ticker.get("BTC"), by_ticker.get("ETH")
+    if btc_row and eth_row:
+        if (btc_row["change_24h"] > 0) == (eth_row["change_24h"] > 0):
             fallback_lines.append(
-                f"{emoji} {ticker}: {row['change_24h']:+.2f}% at {_price(row['price'])}"
+                "🟠🔵 BTC and ETH are pointed the same way today, which tends to anchor "
+                "the rest of the market to their lead"
+            )
+        else:
+            fallback_lines.append(
+                "🟠🔵 BTC and ETH are pulling in different directions today, a split at "
+                "the top that often shows up as indecision further down the board"
             )
     sentiment = _sentiment_line(fear_greed)
     if sentiment:
@@ -326,29 +345,63 @@ def generate_macro(macro: dict) -> str:
     context_lines.append("Sources: FRED for S&P 500, broad dollar index, VIX, and Treasury yields; CoinGecko for BTC dominance")
     context = "\n".join(context_lines)
 
-    sp_1d = _change(sp500, 1)
     sp_5d = _change(sp500, 5)
-    dollar_1d = _change(dollar, 1)
     dollar_5d = _change(dollar, 5)
     if sp_5d > 0 and dollar_5d < 0:
         headline = "🌍 RISK-ON MOMENTUM BUILDS"
+        fallback_lines = [
+            "🌍 Stocks are firming while the dollar eases, a classic risk-on mix that "
+            "tends to loosen the backdrop crypto trades within"
+        ]
     elif sp_5d < 0 and dollar_5d > 0:
         headline = "⚠️ DOLLAR PRESSURE HITS RISK ASSETS"
+        fallback_lines = [
+            "⚠️ Stocks are softening while the dollar firms, a defensive mix that "
+            "tends to tighten conditions for risk assets like crypto"
+        ]
     else:
         headline = "🔍 WALL STREET AND THE DOLLAR DIVERGE"
-    fallback_lines = [
-        f"📈 S&P 500 closed at {sp500.iloc[-1]:,.2f} · 1D {sp_1d:+.2f}% · 5D {sp_5d:+.2f}%",
-        f"💵 Fed broad dollar index is {dollar.iloc[-1]:,.2f} · 1D {dollar_1d:+.2f}% · 5D {dollar_5d:+.2f}%",
-        f"₿ Bitcoin dominance stands at {macro['btc_dominance']:.2f}%",
-    ]
+        fallback_lines = [
+            "🔍 Stocks and the dollar aren't telling one clean story right now, a "
+            "sign the macro backdrop is unsettled rather than firmly risk-on or risk-off"
+        ]
+
     if macro.get("vix") is not None:
-        fallback_lines.append(f"😬 VIX is at {macro['vix']:.2f}")
+        if macro["vix"] >= 25:
+            fallback_lines.append(
+                "😬 Equity volatility is running hot, which tends to spill into crypto as correlated risk-off flows"
+            )
+        elif macro["vix"] <= 15:
+            fallback_lines.append(
+                "😌 Equity volatility is calm, a backdrop that has historically let risk assets, crypto included, grind higher with fewer scares"
+            )
+        else:
+            fallback_lines.append(
+                "😐 Equity volatility sits in a middling range, neither fueling risk appetite nor draining it"
+            )
     if macro.get("yield_10y") is not None and macro.get("yield_2y") is not None:
         spread = macro["yield_10y"] - macro["yield_2y"]
-        fallback_lines.append(f"🏦 10Y-2Y Treasury spread is {spread:+.2f}pp")
+        if spread < 0:
+            fallback_lines.append(
+                "🏦 The Treasury curve is inverted, a signal that has historically preceded tighter, more cautious risk conditions"
+            )
+        else:
+            fallback_lines.append(
+                "🏦 The Treasury curve holds its normal upward slope, consistent with a steadier growth backdrop"
+            )
     if macro.get("btc_sp_corr") is not None:
-        fallback_lines.append(f"🔗 BTC-S&P 500 {config.CORRELATION_WINDOW}D correlation is {macro['btc_sp_corr']:+.2f}")
-    fallback_lines.append("🔄 Stocks and the dollar are showing the current balance between risk appetite and defensiveness")
+        if abs(macro["btc_sp_corr"]) >= 0.5:
+            fallback_lines.append(
+                "🔗 BTC is trading closely with stocks right now, so equity swings are likely spilling straight into crypto"
+            )
+        else:
+            fallback_lines.append(
+                "🔗 BTC's link to stocks is looser right now, leaving more room for crypto-specific drivers to take over"
+            )
+    fallback_lines.append(
+        "📚 Watching stocks, the dollar, and rates together — rather than any one alone — is what "
+        "separates a macro-driven crypto move from one crypto is making on its own"
+    )
     fallback_lines.append(f"🕒 S&P data: {sp500.index[-1].date()} · dollar data: {dollar.index[-1].date()} · FRED + CoinGecko")
     return _complete(MACRO_PROMPT, context, headline, "\n\n".join(fallback_lines))
 
@@ -376,15 +429,42 @@ def generate_daily_pulse(derivatives_rows: list[dict], trending: list[dict]) -> 
     else:
         headline = "⚖️ DERIVATIVES MARKET SITS NEAR BALANCE"
 
-    fallback_lines = [
-        f"💸 {row['ticker']} funding {row['funding_rate']:+.4f}%" for row in derivatives_rows
-    ] + [
-        f"📊 {row['ticker']} open interest ${row['open_interest'] / 1_000_000:,.0f}M"
-        for row in derivatives_rows
-    ]
+    long_leaning = sum(1 for row in derivatives_rows if row["funding_rate"] > 0)
+    short_leaning = sum(1 for row in derivatives_rows if row["funding_rate"] < 0)
+    total = len(derivatives_rows)
+    if long_leaning == total:
+        crowd_line = (
+            "🐂 Every tracked market is paying longs a premium right now, a sign "
+            "leveraged buyers are firmly in control of positioning"
+        )
+    elif short_leaning == total:
+        crowd_line = (
+            "🐻 Every tracked market is paying shorts a premium right now, a sign "
+            "leveraged sellers are firmly in control of positioning"
+        )
+    else:
+        crowd_line = (
+            f"⚖️ {long_leaning} of {total} tracked markets lean long on funding and "
+            f"{short_leaning} lean short, a split field rather than a one-sided crowd"
+        )
+
+    biggest_oi = max(derivatives_rows, key=lambda row: row["open_interest"])
+    leverage_line = (
+        f"🏦 {biggest_oi['ticker']} still carries the deepest open interest of the group, "
+        "so it's where a sharp funding flip or price swing would ripple through the most leverage"
+    )
+
+    fallback_lines = [crowd_line, leverage_line]
     if trending:
-        names = ", ".join(f"{item['symbol']}" for item in trending)
-        fallback_lines.append(f"🔎 Trending on CoinGecko: {names}")
+        names = ", ".join(item["symbol"] for item in trending)
+        fallback_lines.append(
+            f"🔎 Fresh attention is chasing {names}, and trending names typically carry "
+            "thinner, more reflexive positioning than the majors"
+        )
+    fallback_lines.append(
+        "📚 Funding shows who is crowded and paying to hold their side; open interest "
+        "shows how much leverage could unwind if that crowd gets caught wrong"
+    )
     fallback_lines.append("🕒 Perpetual derivatives snapshot · CoinGecko")
     return _complete(DAILY_PULSE_PROMPT, context, headline, "\n\n".join(fallback_lines))
 
@@ -424,22 +504,52 @@ def generate_weekly_digest(weekly_rows: list[dict], scoreboard_rows: list[dict],
         headline = "📅 WEEKLY DIGEST: A MIXED WEEK OF ROTATION"
 
     fallback_lines = [
-        f"🚀 Strongest 7D: {strongest['ticker']} {strongest['change_7d']:+.2f}%",
-        f"🔻 Weakest 7D: {weakest['ticker']} {weakest['change_7d']:+.2f}%",
-        f"📈 Most overbought: {most_overbought['ticker']} RSI {most_overbought['rsi']:.1f}",
-        f"📉 Most oversold: {most_oversold['ticker']} RSI {most_oversold['rsi']:.1f}",
-        f"⚡ Most volatile: {most_volatile['ticker']} ATR {most_volatile['atr_pct']:.2f}%",
-        f"₿ BTC dominance {dominance_change:+.2f}pp over the window to {dominance_history.iloc[-1]:.2f}%",
-        f"🧭 Fear & Greed {feargreed_change:+.0f} points over the window to {feargreed_history.iloc[-1]:.0f}/100",
-        f"💧 Total market cap {mcap_change_pct:+.2f}% · stablecoin market cap {stablecoin_change_pct:+.2f}%",
-        "🕒 Weekly digest · Binance, CoinGecko, alternative.me",
+        f"🚀 {strongest['ticker']} led the tracked majors this week while {weakest['ticker']} lagged "
+        "furthest behind, a rotation worth watching for whether it persists or reverses",
+        f"📈 {most_overbought['ticker']} sits the most stretched to the upside and "
+        f"{most_oversold['ticker']} the most stretched to the downside — worth watching for a pause "
+        "or a snapback rather than assuming either just keeps going",
+        f"⚡ {most_volatile['ticker']} swung the widest of the group this week, a reminder that the "
+        "size of a move needs a matching size of risk",
     ]
+    if dominance_change > 0:
+        fallback_lines.append(
+            "₿ Bitcoin dominance rose over the week, a sign capital leaned toward BTC over the rest of the market"
+        )
+    elif dominance_change < 0:
+        fallback_lines.append(
+            "₿ Bitcoin dominance fell over the week, a sign capital rotated out of BTC and into the broader market"
+        )
+    else:
+        fallback_lines.append("₿ Bitcoin dominance held steady over the week, no clear rotation either way")
+    if feargreed_change > 0:
+        fallback_lines.append("🧭 Sentiment drifted toward greed over the week")
+    elif feargreed_change < 0:
+        fallback_lines.append("🧭 Sentiment drifted toward fear over the week")
+    else:
+        fallback_lines.append("🧭 Sentiment held steady over the week")
+    if mcap_change_pct > 0 and stablecoin_change_pct < 0:
+        fallback_lines.append(
+            "💧 Total market cap grew while stablecoin supply shrank, consistent with capital moving "
+            "off the sidelines and into risk assets"
+        )
+    elif mcap_change_pct < 0 and stablecoin_change_pct > 0:
+        fallback_lines.append(
+            "💧 Total market cap shrank while stablecoin supply grew, consistent with capital moving "
+            "to the sidelines rather than staying in risk assets"
+        )
+    else:
+        fallback_lines.append(
+            "💧 Total market cap and stablecoin supply moved together this week rather than telling a "
+            "clean story of capital rotating in or out"
+        )
+    fallback_lines.append("🕒 Weekly digest · Binance, CoinGecko, alternative.me")
     return _complete(WEEKLY_DIGEST_PROMPT, context, headline, "\n\n".join(fallback_lines))
 
 
 def generate_followup(symbol: str, timeframe: str, message: str) -> str:
     """Create a factual template reply when a previously flagged level breaks."""
-    return f"📊 Update · {symbol} ({timeframe.upper()})\n\n{message}{config.DISCLAIMER}"
+    return _fit_caption(f"📊 Update · {symbol} ({timeframe.upper()})\n\n{message}")
 
 
 def generate_event_alert(ticker: str, price: float, event: str, levels: dict,

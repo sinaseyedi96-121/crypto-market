@@ -21,7 +21,7 @@ def post_chart(chat_id: str, image_path: str, caption: str) -> dict:
     with open(image_path, "rb") as f:
         resp = requests.post(
             f"{_base_url()}/sendPhoto",
-            data={"chat_id": chat_id, "caption": caption},
+            data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
             files={"photo": f},
             timeout=30,
         )
@@ -43,6 +43,7 @@ def post_charts(chat_id: str, image_paths: list[str], caption: str) -> dict:
             item = {"type": "photo", "media": f"attach://{key}"}
             if index == 0:
                 item["caption"] = caption
+                item["parse_mode"] = "HTML"
             media.append(item)
             files[key] = open(image_path, "rb")
         response = requests.post(
@@ -67,7 +68,12 @@ def reply_with_photo(chat_id: str, reply_to_message_id: int, image_path: str, ca
     with open(image_path, "rb") as f:
         resp = requests.post(
             f"{_base_url()}/sendPhoto",
-            data={"chat_id": chat_id, "caption": caption, "reply_to_message_id": reply_to_message_id},
+            data={
+                "chat_id": chat_id,
+                "caption": caption,
+                "parse_mode": "HTML",
+                "reply_to_message_id": reply_to_message_id,
+            },
             files={"photo": f},
             timeout=30,
         )
@@ -82,6 +88,7 @@ def reply_to_message(chat_id: str, reply_to_message_id: int, text: str) -> dict:
         data={
             "chat_id": chat_id,
             "text": text,
+            "parse_mode": "HTML",
             "reply_to_message_id": reply_to_message_id,
         },
         timeout=30,

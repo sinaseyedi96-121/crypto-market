@@ -323,6 +323,18 @@ class NarrativeTests(unittest.TestCase):
         self.assertLessEqual(len(result), config.TELEGRAM_CAPTION_LIMIT)
         self.assertTrue(result.endswith(config.DISCLAIMER))
 
+    def test_disclaimer_is_a_follow_link_not_a_warning(self):
+        self.assertIn(config.CHANNEL_URL, config.DISCLAIMER)
+        self.assertIn("Follow", config.DISCLAIMER)
+        self.assertNotIn("financial advice", config.DISCLAIMER)
+
+    def test_fit_caption_escapes_html_so_the_follow_link_still_parses(self):
+        result = narrative_generator._fit_caption("📈 S&P 500 vs <BTC> is a common comparison")
+        self.assertIn("S&amp;P 500", result)
+        self.assertIn("&lt;BTC&gt;", result)
+        # The disclaimer's own anchor tag must stay raw HTML, not get escaped.
+        self.assertIn(f'<a href="{config.CHANNEL_URL}">', result)
+
     def test_empty_ai_response_uses_titled_factual_fallback(self):
         response = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=""))]
@@ -347,7 +359,10 @@ class NarrativeTests(unittest.TestCase):
         trending = [{"name": "Some Coin", "symbol": "SC", "market_cap_rank": 120, "change_24h": 12.0}]
         with patch.object(narrative_generator, "_client", side_effect=RuntimeError("no network in tests")):
             result = narrative_generator.generate_daily_pulse(derivatives_rows, trending)
-        self.assertIn("BTC funding", result)
+        self.assertIn("BTC", result)
+        # The fallback must tell the story, not restate the exact figures the chart already shows.
+        self.assertNotIn("+0.0120%", result)
+        self.assertNotIn("$6,800,000,000", result)
         self.assertTrue(result.endswith(config.DISCLAIMER))
 
     def test_weekly_digest_falls_back_without_network(self):
