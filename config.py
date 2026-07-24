@@ -136,7 +136,7 @@ CHANNELS = [
         "language": "fa",
         "env": "TELEGRAM_CHANNEL_FA",
         "name": "تحلیل بازار کریپتو",
-        "url": "https://t.me/crypro_market_farsi",
+        "url": "https://t.me/crypto_market_farsi",
         "required": False,
     },
 ]

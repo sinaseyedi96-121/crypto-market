@@ -331,7 +331,7 @@ class NarrativeTests(unittest.TestCase):
 
     def test_farsi_disclaimer_links_the_farsi_channel(self):
         fa = config.DISCLAIMERS["fa"]
-        self.assertIn("https://t.me/crypro_market_farsi", fa)
+        self.assertIn("https://t.me/crypto_market_farsi", fa)
         self.assertIn("تحلیل بازار کریپتو", fa)
 
     def test_fit_caption_escapes_html_so_the_follow_link_still_parses(self):
