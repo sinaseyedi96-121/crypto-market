@@ -90,10 +90,16 @@ WATCH_MAX_ITEMS = 6
 # clears it, no signal is opened for that asset that day.
 MAX_OPEN_SIGNALS_PER_ASSET = 1
 MIN_SIGNAL_RISK_REWARD = 3.0
-SIGNAL_DISCLAIMER = (
-    "\n\n⚠️ Hypothetical educational scenario, not a trade recommendation. "
-    "Not financial advice."
-)
+SIGNAL_DISCLAIMERS = {
+    "en": (
+        "\n\n⚠️ Hypothetical educational scenario, not a trade recommendation. "
+        "Not financial advice."
+    ),
+    "fa": (
+        "\n\n⚠️ سناریوی آموزشی و فرضی؛ نه توصیه‌ی معاملاتی است و نه مشاوره‌ی مالی."
+    ),
+}
+SIGNAL_DISCLAIMER = SIGNAL_DISCLAIMERS["en"]   # default/back-compat (English)
 
 # ---- Content review (weekly DeepSeek critique, see README) ----
 POSTS_LOG_FILE = "posts_log.jsonl"
@@ -111,7 +117,30 @@ DEEPSEEK_MAX_TOKENS = 500
 
 # ---- Telegram ----
 TELEGRAM_CAPTION_LIMIT = 1024              # Telegram's hard cap on photo captions
-CHANNEL_URL = "https://t.me/cryptomarket_bit"
+
+# The same bot publishes every post to each channel below. Charts are shared
+# (numbers are numbers); only the caption text is localized per channel.
+# The English channel is primary and required; the Farsi channel is optional —
+# if its env var is unset (e.g. the secret hasn't been added yet) it is skipped
+# with a warning so the primary channel keeps posting. The bot must be an admin
+# of every channel it posts to.
+CHANNELS = [
+    {
+        "language": "en",
+        "env": "TELEGRAM_CHANNEL",
+        "name": "To the Moon 🚀",
+        "url": "https://t.me/cryptomarket_bit",
+        "required": True,
+    },
+    {
+        "language": "fa",
+        "env": "TELEGRAM_CHANNEL_FA",
+        "name": "تحلیل بازار کریپتو",
+        "url": "https://t.me/crypro_market_farsi",
+        "required": False,
+    },
+]
+CHANNEL_URL = CHANNELS[0]["url"]           # primary channel, kept for back-compat
 
 # ---- Chart ----
 CHART_DISPLAY_CANDLES = 120                # calculate on all candles, render only the recent view
@@ -135,7 +164,12 @@ CHART_DIR = "charts"
 STATE_FILE = "post_history.json"
 
 # ---- Mandatory footer appended in code (not left to the model to remember) ----
-# A clickable follow link back to the channel, so a forwarded/reposted caption
-# still drives people back to the source. Rendered via Telegram's HTML parse
-# mode (see telegram_publisher.py), so caption bodies are HTML-escaped first.
-DISCLAIMER = f'\n\n<a href="{CHANNEL_URL}">🔔 Follow</a>'
+# A clickable link back to the channel, so a forwarded/reposted caption still
+# drives people back to the source. The link text is the channel's display name.
+# Rendered via Telegram's HTML parse mode (see telegram_publisher.py), so caption
+# bodies are HTML-escaped first. Channel names carry no HTML-special characters.
+DISCLAIMERS = {
+    channel["language"]: f'\n\n<a href="{channel["url"]}">{channel["name"]}</a>'
+    for channel in CHANNELS
+}
+DISCLAIMER = DISCLAIMERS["en"]             # default/back-compat (English)

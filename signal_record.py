@@ -67,13 +67,22 @@ def load_scorecard(open_count: int = 0, path: str | None = None,
     return compute_scorecard(closed, open_count)
 
 
-def format_record_line(scorecard: dict) -> str:
+def format_record_line(scorecard: dict, language: str = "en") -> str:
     """One compact educational line summarizing the track record so far, suitable
-    for appending under a signal's outcome reply."""
+    for appending under a signal's outcome reply. Localized so each channel's
+    closeout reply carries the tally in its own language."""
     total = scorecard["closed_count"]
     if not total:
+        if language == "fa":
+            return "📊 کارنامه: این نخستین سناریوی فرضی است که بسته می‌شود."
         return "📊 Track record: this is the first hypothetical scenario to close."
     win_rate = scorecard["win_rate_pct"]
+    if language == "fa":
+        return (
+            f"📊 کارنامه تا اینجا: {total} سناریو بسته شد · "
+            f"{scorecard['win_count']} به هدف رسید ({win_rate:.0f}%) · "
+            f"میانگین نتیجه {scorecard['avg_r']:+.1f}R"
+        )
     return (
         f"📊 Track record so far: {total} scenarios closed · "
         f"{scorecard['win_count']} reached target ({win_rate:.0f}%) · "

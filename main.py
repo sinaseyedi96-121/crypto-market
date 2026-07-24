@@ -58,18 +58,18 @@ def _evaluate_signal(signal: dict, price: float) -> tuple[str, float] | None:
     return None
 
 
-def _maybe_open_signal(state: dict, chat_id: str, asset: dict, timeframe: str,
-                        analysis: dict, frame: pd.DataFrame, chart_message_id: int | None) -> None:
+def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe: str,
+                        analysis: dict, frame: pd.DataFrame, chart_message_ids: dict) -> None:
     """Opens one hypothetical long/short scenario per asset, as a chart reply
-    under its own post, if none is already open. Educational only — see README.
-    Stop is the nearby support/resistance level; target is the farthest pivot
-    level (searched across all fetched history) that still clears
+    under its own post on each channel, if none is already open. Educational
+    only — see README. Stop is the nearby support/resistance level; target is the
+    farthest pivot level (searched across all fetched history) that still clears
     config.MIN_SIGNAL_RISK_REWARD. If nothing does, no signal is opened."""
     symbol = asset["symbol"]
     if state_manager.get_open_signal(state, symbol):
         return
     direction = _signal_direction(analysis["trend"])
-    if not direction or not chart_message_id:
+    if not direction or not chart_message_ids:
         return
 
     levels = analysis["levels"]
@@ -80,15 +80,46 @@ def _maybe_open_signal(state: dict, chat_id: str, asset: dict, timeframe: str,
         print(f"Skipped hypothetical {direction} scenario for {asset['ticker']}: "
               f"no level clears the minimum {config.MIN_SIGNAL_RISK_REWARD:.0f}:1 reward:risk.")
         return
-    caption = narrative_generator.generate_signal_post(
-        asset["ticker"], timeframe, direction, entry, target, stop,
-        analysis["trend"], analysis["rsi"],
-    )
     signal_chart = chart_generator.generate_chart(
         frame, symbol, timeframe, levels,
         signal={"direction": direction, "entry": entry, "target": target, "stop": stop},
     )
-    posted = telegram_publisher.reply_with_photo(chat_id, chart_message_id, signal_chart, caption)
+
+    signal_message_ids = {}
+    for channel in channels:
+        lang = channel["language"]
+        reply_to = chart_message_ids.get(lang)
+        if not reply_to:
+            continue
+        try:
+            caption = narrative_generator.generate_signal_post(
+                asset["ticker"], timeframe, direction, entry, target, stop,
+                analysis["trend"], analysis["rsi"], language=lang,
+            )
+            posted = telegram_publisher.reply_with_photo(
+                channel["chat_id"], reply_to, signal_chart, caption)
+            signal_message_ids[lang] = posted.get("message_id")
+            state_manager.append_post_log({
+                "timestamp": time.time(),
+                "mode": "signal_open",
+                "language": lang,
+                "ticker": asset["ticker"],
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "direction": direction,
+                "entry": entry,
+                "target": target,
+                "stop": stop,
+                "caption": caption,
+                "message_id": posted.get("message_id"),
+            })
+        except Exception as exc:
+            print(f"ERROR opening scenario for {asset['ticker']} on '{lang}' channel: {exc}",
+                  file=sys.stderr)
+
+    if not signal_message_ids:
+        print(f"Could not open hypothetical scenario for {asset['ticker']} on any channel.")
+        return
     state_manager.open_signal(state, symbol, {
         "direction": direction,
         "entry": entry,
@@ -96,34 +127,24 @@ def _maybe_open_signal(state: dict, chat_id: str, asset: dict, timeframe: str,
         "stop": stop,
         "timeframe": timeframe,
         "opened_at": time.time(),
-        "message_id": posted.get("message_id"),
-    })
-    state_manager.append_post_log({
-        "timestamp": time.time(),
-        "mode": "signal_open",
-        "ticker": asset["ticker"],
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "direction": direction,
-        "entry": entry,
-        "target": target,
-        "stop": stop,
-        "caption": caption,
-        "message_id": posted.get("message_id"),
+        "message_ids": signal_message_ids,
+        "message_id": signal_message_ids.get("en"),
     })
     print(f"Opened hypothetical {direction} scenario for {asset['ticker']}.")
 
 
-def check_followup(prev_entry: dict, current_price: float) -> str | None:
+def check_followup(prev_entry: dict, current_price: float) -> dict | None:
+    """Return a structured level-break event (or None) so the caption can be
+    rendered in each channel's language at publish time."""
     if not prev_entry:
         return None
     support = prev_entry["levels"]["support"]
     resistance = prev_entry["levels"]["resistance"]
     pct = config.FOLLOWUP_THRESHOLD_PCT / 100
     if current_price > resistance * (1 + pct):
-        return f"Price moved above the ~{resistance:.2f} resistance zone from the previous post and is now {current_price:.2f}."
+        return {"side": "above", "level": resistance, "price": current_price}
     if current_price < support * (1 - pct):
-        return f"Price moved below the ~{support:.2f} support zone from the previous post and is now {current_price:.2f}."
+        return {"side": "below", "level": support, "price": current_price}
     return None
 
 
@@ -181,11 +202,64 @@ def _asset(ticker: str) -> dict:
     return next(asset for asset in config.ASSETS if asset["ticker"] == ticker)
 
 
-def _publish(chat_id: str, image_paths: list[str], caption: str) -> dict:
-    return telegram_publisher.post_charts(chat_id, image_paths, caption)
+def _resolve_channels() -> list[dict]:
+    """Resolve configured channels to those whose chat-id env var is set. The
+    primary (English) channel is required; an optional channel (e.g. Farsi, if
+    its secret isn't added yet) is skipped with a warning so the primary keeps
+    posting."""
+    resolved = []
+    for channel in config.CHANNELS:
+        chat_id = os.environ.get(channel["env"])
+        if not chat_id:
+            if channel.get("required"):
+                raise RuntimeError(f"Missing required environment variable: {channel['env']}")
+            print(f"Channel '{channel['language']}' ({channel['env']}) is not configured; "
+                  "skipping it.", file=sys.stderr)
+            continue
+        resolved.append({**channel, "chat_id": chat_id})
+    if not resolved:
+        raise RuntimeError("No channels are configured to publish to")
+    return resolved
 
 
-def run_market_map(state: dict, chat_id: str, force: bool = False) -> None:
+def _message_ids(obj: dict | None) -> dict:
+    """Per-channel Telegram message IDs for a stored entry/signal, tolerant of
+    legacy single-id records written before dual-channel publishing."""
+    if not obj:
+        return {}
+    ids = obj.get("message_ids")
+    if ids:
+        return ids
+    legacy = obj.get("message_id")
+    return {"en": legacy} if legacy else {}
+
+
+def _publish_localized(channels: list[dict], image_paths: list[str], caption_for,
+                       mode: str, log_extra: dict | None = None) -> dict:
+    """Publish the same chart(s) to every channel with a per-language caption.
+    Charts are shared (numbers are numbers); only the caption is localized.
+    Per-channel failures are isolated so one channel can't sink the others.
+    Returns {language: posted_result} for the channels that succeeded."""
+    results = {}
+    for channel in channels:
+        lang = channel["language"]
+        try:
+            caption = caption_for(lang)
+            posted = telegram_publisher.post_charts(channel["chat_id"], image_paths, caption)
+            results[lang] = posted
+            log = {"timestamp": time.time(), "mode": mode, "language": lang,
+                   "caption": caption, "message_id": posted.get("message_id")}
+            if log_extra:
+                log.update(log_extra)
+            state_manager.append_post_log(log)
+        except Exception as exc:
+            print(f"ERROR publishing {mode} to '{lang}' channel: {exc}", file=sys.stderr)
+    if not results:
+        raise RuntimeError(f"Failed to publish {mode} to any channel")
+    return results
+
+
+def run_market_map(state: dict, channels: list[dict], force: bool = False) -> None:
     try:
         global_snapshot = data_fetcher.fetch_global_snapshot()
         stablecoin_mcap = data_fetcher.fetch_stablecoin_market_cap()
@@ -202,19 +276,42 @@ def run_market_map(state: dict, chat_id: str, force: bool = False) -> None:
     snapshot = data_fetcher.fetch_market_snapshot(config.ASSETS)
     fear_greed = data_fetcher.fetch_fear_greed_index()
     chart_path = chart_generator.generate_market_map_chart(snapshot)
-    caption = narrative_generator.generate_market_map(snapshot, fear_greed)
-    posted = _publish(chat_id, [chart_path], caption)
-    state_manager.append_post_log({
-        "timestamp": time.time(),
-        "mode": "market_map",
-        "caption": caption,
-        "message_id": posted.get("message_id"),
-    })
+    _publish_localized(
+        channels, [chart_path],
+        lambda lang: narrative_generator.generate_market_map(snapshot, fear_greed, lang),
+        "market_map",
+    )
     _mark_slot(state, "market_map")
     print("Posted daily market map.")
 
 
-def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
+def _post_followup(channels: list[dict], ticker: str, timeframe: str,
+                   previous: dict, followup: dict) -> None:
+    """Reply with a level-break follow-up under each channel's original post."""
+    prev_ids = _message_ids(previous)
+    for channel in channels:
+        lang = channel["language"]
+        reply_to = prev_ids.get(lang)
+        if not reply_to:
+            continue
+        try:
+            text = narrative_generator.generate_followup(ticker, timeframe, followup, language=lang)
+            posted = telegram_publisher.reply_to_message(channel["chat_id"], reply_to, text)
+            state_manager.append_post_log({
+                "timestamp": time.time(),
+                "mode": "followup",
+                "language": lang,
+                "ticker": ticker,
+                "timeframe": timeframe,
+                "caption": text,
+                "message_id": posted.get("message_id"),
+            })
+        except Exception as exc:
+            print(f"ERROR posting {ticker} follow-up to '{lang}' channel: {exc}", file=sys.stderr)
+    print(f"Posted {ticker} level follow-up.")
+
+
+def run_deep_dive(state: dict, channels: list[dict], force: bool = False) -> None:
     if not force and _slot_already_posted(state, "deep_dive"):
         print("Today's deep dive was already posted; skipping duplicate.")
         return
@@ -236,18 +333,8 @@ def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
         previous = state_manager.get_entry(state, asset["symbol"], timeframe)
 
         followup = check_followup(previous, current_price)
-        if followup and previous.get("message_id"):
-            text = narrative_generator.generate_followup(ticker, timeframe, followup)
-            followup_posted = telegram_publisher.reply_to_message(chat_id, previous["message_id"], text)
-            state_manager.append_post_log({
-                "timestamp": time.time(),
-                "mode": "followup",
-                "ticker": ticker,
-                "timeframe": timeframe,
-                "caption": text,
-                "message_id": followup_posted.get("message_id"),
-            })
-            print(f"Posted {ticker} level follow-up.")
+        if followup and _message_ids(previous):
+            _post_followup(channels, ticker, timeframe, previous, followup)
 
         chart_paths.append(chart_generator.generate_chart(frame, asset["symbol"], timeframe, levels))
         analyses.append({
@@ -263,51 +350,124 @@ def run_deep_dive(state: dict, chat_id: str, force: bool = False) -> None:
         time.sleep(1)
 
     fear_greed = data_fetcher.fetch_fear_greed_index()
-    caption = narrative_generator.generate_comparison(analyses, fear_greed)
-    posted = _publish(chat_id, chart_paths, caption)
-    state_manager.append_post_log({
-        "timestamp": time.time(),
-        "mode": "deep_dive",
-        "assets": list(pair),
-        "timeframe": timeframe,
-        "caption": caption,
-        "message_id": posted.get("message_id"),
-    })
-    album_ids = posted.get("album_message_ids") or [posted.get("message_id")] * len(pair)
-    for (asset, levels, current_price, candle_closed_at, frame), analysis, chart_message_id in zip(
-        pending_state, analyses, album_ids
+    posted_by_lang = _publish_localized(
+        channels, chart_paths,
+        lambda lang: narrative_generator.generate_comparison(analyses, fear_greed, lang),
+        "deep_dive", log_extra={"assets": list(pair), "timeframe": timeframe},
+    )
+
+    # Per-channel message IDs: the album's first message anchors follow-ups, and
+    # each asset's own chart within the album anchors its hypothetical scenario.
+    entry_ids = {lang: posted.get("message_id") for lang, posted in posted_by_lang.items()}
+    posted_date = next(iter(posted_by_lang.values())).get("date")
+    album_ids_by_lang = {
+        lang: (posted.get("album_message_ids") or [posted.get("message_id")] * len(pair))
+        for lang, posted in posted_by_lang.items()
+    }
+    for index, ((asset, levels, current_price, candle_closed_at, frame), analysis) in enumerate(
+        zip(pending_state, analyses)
     ):
         state_manager.set_entry(state, asset["symbol"], timeframe, {
             "levels": levels,
             "price_at_post": current_price,
-            "message_id": posted.get("message_id"),
-            "posted_at": posted.get("date"),
+            "message_ids": dict(entry_ids),
+            "message_id": entry_ids.get("en"),
+            "posted_at": posted_date,
             "candle_closed_at": candle_closed_at,
         })
-        _maybe_open_signal(state, chat_id, asset, timeframe, analysis, frame, chart_message_id)
+        chart_message_ids = {lang: ids[index] for lang, ids in album_ids_by_lang.items()}
+        _maybe_open_signal(state, channels, asset, timeframe, analysis, frame, chart_message_ids)
     _mark_slot(state, "deep_dive")
     print(f"Posted deep-dive album for {' + '.join(pair)}.")
 
 
-def _technical_event(previous: dict | None, price: float, trend: str) -> tuple[int, str] | None:
+def _technical_event(previous: dict | None, price: float, trend: str):
+    """Return (severity, english_description, event_meta) or None. The meta lets
+    the caption be re-rendered per channel language; the description is retained
+    for logging and the test contract."""
     if not previous:
         return None
     prior_levels = previous["levels"]
     zone_width = float(prior_levels.get("zone_width", 0))
     if price > prior_levels["resistance"] + zone_width:
-        return 2, f"Closed above the previous resistance zone near {prior_levels['resistance']:,.4g}"
+        level = prior_levels["resistance"]
+        return 2, f"Closed above the previous resistance zone near {level:,.4g}", \
+            {"kind": "break_up", "level": level}
     if price < prior_levels["support"] - zone_width:
-        return 2, f"Closed below the previous support zone near {prior_levels['support']:,.4g}"
+        level = prior_levels["support"]
+        return 2, f"Closed below the previous support zone near {level:,.4g}", \
+            {"kind": "break_down", "level": level}
 
     current_regime = trend.split(":", 1)[0]
     previous_regime = previous.get("trend", "").split(":", 1)[0]
     directional = {"bullish", "bearish"}
     if current_regime in directional and previous_regime in directional and current_regime != previous_regime:
-        return 1, f"EMA and price structure changed from {previous_regime} to {current_regime}"
+        return 1, f"EMA and price structure changed from {previous_regime} to {current_regime}", \
+            {"kind": "regime_change", "from": previous_regime, "to": current_regime}
     return None
 
 
-def run_alert_scan(state: dict, chat_id: str, force: bool = False) -> None:
+def _close_open_signal(state: dict, channels: list[dict], asset: dict,
+                       open_signal: dict, price: float, close_time: str) -> None:
+    """Reply with the scenario's outcome under each channel's signal post, then
+    close it. The track-record tally is logged exactly once (canonical
+    `signal_close`); mirror channels log under `signal_close_mirror` so the
+    scorecard, which counts `signal_close` records, never double-counts."""
+    outcome, r_multiple = _evaluate_signal(open_signal, price)  # caller ensured non-None
+    # Fold this just-closed scenario into the tally before it is logged, so the
+    # reply's running record includes itself. One asset is closing here, so its
+    # open slot no longer counts.
+    open_count = len(state.get("_signals", {})) - 1
+    scorecard = signal_record.load_scorecard(
+        open_count=max(open_count, 0),
+        include={"ticker": asset["ticker"], "outcome": outcome, "r_multiple": r_multiple},
+    )
+
+    signal_ids = _message_ids(open_signal)
+    canonical_logged = False
+    for channel in channels:
+        lang = channel["language"]
+        reply_to = signal_ids.get(lang)
+        if not reply_to:
+            continue
+        try:
+            record_line = signal_record.format_record_line(scorecard, lang)
+            outcome_caption = narrative_generator.generate_signal_outcome(
+                asset["ticker"], open_signal["timeframe"], open_signal["direction"],
+                open_signal["entry"], price, outcome, r_multiple, close_time,
+                record_line=record_line, language=lang,
+            )
+            outcome_posted = telegram_publisher.reply_to_message(
+                channel["chat_id"], reply_to, outcome_caption)
+            state_manager.append_post_log({
+                "timestamp": time.time(),
+                "mode": "signal_close" if not canonical_logged else "signal_close_mirror",
+                "language": lang,
+                "ticker": asset["ticker"],
+                "symbol": asset["symbol"],
+                "timeframe": open_signal["timeframe"],
+                "direction": open_signal["direction"],
+                "entry": open_signal["entry"],
+                "exit_price": price,
+                "outcome": outcome,
+                "r_multiple": r_multiple,
+                "caption": outcome_caption,
+                "message_id": outcome_posted.get("message_id"),
+            })
+            canonical_logged = True
+        except Exception as exc:
+            print(f"ERROR closing scenario for {asset['ticker']} on '{lang}' channel: {exc}",
+                  file=sys.stderr)
+
+    if not canonical_logged:
+        print(f"Could not post {asset['ticker']} scenario close on any channel; will retry.")
+        return
+    state_manager.close_signal(state, asset["symbol"])
+    print(f"Closed hypothetical {open_signal['direction']} scenario for "
+          f"{asset['ticker']}: {outcome} ({r_multiple:+.2f}R).")
+
+
+def run_alert_scan(state: dict, channels: list[dict], force: bool = False) -> None:
     """Scan confirmed 4h candles but publish only significant, capped events."""
     timeframe = "4h"
     candidates = []
@@ -330,59 +490,26 @@ def run_alert_scan(state: dict, chat_id: str, force: bool = False) -> None:
             continue
 
         open_signal = state_manager.get_open_signal(state, asset["symbol"])
-        if open_signal:
-            result = _evaluate_signal(open_signal, price)
-            if result:
-                outcome, r_multiple = result
-                # Fold this just-closed scenario into the tally before it is
-                # logged, so the reply's running record includes itself. One
-                # asset is closing here, so its open slot no longer counts.
-                open_count = len(state.get("_signals", {})) - 1
-                scorecard = signal_record.load_scorecard(
-                    open_count=max(open_count, 0),
-                    include={"ticker": asset["ticker"], "outcome": outcome, "r_multiple": r_multiple},
-                )
-                record_line = signal_record.format_record_line(scorecard)
-                outcome_caption = narrative_generator.generate_signal_outcome(
-                    asset["ticker"], open_signal["timeframe"], open_signal["direction"],
-                    open_signal["entry"], price, outcome, r_multiple, close_time,
-                    record_line=record_line,
-                )
-                outcome_posted = telegram_publisher.reply_to_message(
-                    chat_id, open_signal["message_id"], outcome_caption
-                )
-                state_manager.close_signal(state, asset["symbol"])
-                state_manager.append_post_log({
-                    "timestamp": time.time(),
-                    "mode": "signal_close",
-                    "ticker": asset["ticker"],
-                    "symbol": asset["symbol"],
-                    "timeframe": open_signal["timeframe"],
-                    "direction": open_signal["direction"],
-                    "entry": open_signal["entry"],
-                    "exit_price": price,
-                    "outcome": outcome,
-                    "r_multiple": r_multiple,
-                    "caption": outcome_caption,
-                    "message_id": outcome_posted.get("message_id"),
-                })
-                print(f"Closed hypothetical {open_signal['direction']} scenario for {asset['ticker']}: {outcome} ({r_multiple:+.2f}R).")
+        if open_signal and _evaluate_signal(open_signal, price):
+            _close_open_signal(state, channels, asset, open_signal, price, close_time)
 
         if not force and previous and previous.get("candle_closed_at") == close_time:
             continue
 
         event = _technical_event(previous, price, trend)
+        prev_ids = _message_ids(previous)
         entry = {
             "levels": levels,
             "price_at_post": price,
-            "message_id": previous.get("message_id") if previous else None,
+            "message_ids": prev_ids,
+            "message_id": prev_ids.get("en"),
             "posted_at": previous.get("posted_at") if previous else None,
             "candle_closed_at": close_time,
             "trend": trend,
         }
         staged_entries.append((asset, entry))
         if event:
-            severity, description = event
+            severity, description, event_meta = event
             candidates.append({
                 "severity": severity,
                 "asset": asset,
@@ -390,7 +517,7 @@ def run_alert_scan(state: dict, chat_id: str, force: bool = False) -> None:
                 "levels": levels,
                 "price": price,
                 "close_time": close_time,
-                "description": description,
+                "event": event_meta,
                 "entry": entry,
             })
 
@@ -407,22 +534,21 @@ def run_alert_scan(state: dict, chat_id: str, force: bool = False) -> None:
         path = chart_generator.generate_chart(
             candidate["frame"], asset["symbol"], timeframe, candidate["levels"]
         )
-        caption = narrative_generator.generate_event_alert(
-            asset["ticker"], candidate["price"], candidate["description"],
-            candidate["levels"], candidate["close_time"],
-            candidate["frame"].attrs.get("source", "Binance"),
-        )
-        posted = _publish(chat_id, [path], caption)
-        candidate["entry"]["message_id"] = posted.get("message_id")
-        candidate["entry"]["posted_at"] = posted.get("date")
-        state_manager.append_post_log({
-            "timestamp": time.time(),
-            "mode": "alert",
-            "ticker": asset["ticker"],
-            "timeframe": timeframe,
-            "caption": caption,
-            "message_id": posted.get("message_id"),
-        })
+        source = candidate["frame"].attrs.get("source", "Binance")
+        try:
+            results = _publish_localized(
+                channels, [path],
+                lambda lang: narrative_generator.generate_event_alert(
+                    asset["ticker"], candidate["price"], candidate["event"],
+                    candidate["levels"], candidate["close_time"], source, language=lang),
+                "alert", log_extra={"ticker": asset["ticker"], "timeframe": timeframe},
+            )
+        except Exception as exc:
+            print(f"ERROR posting {asset['ticker']} alert to any channel: {exc}", file=sys.stderr)
+            continue
+        candidate["entry"]["message_ids"] = {lang: r.get("message_id") for lang, r in results.items()}
+        candidate["entry"]["message_id"] = candidate["entry"]["message_ids"].get("en")
+        candidate["entry"]["posted_at"] = next(iter(results.values())).get("date")
         used += 1
         print(f"Posted confirmed 4h alert for {asset['ticker']}.")
 
@@ -456,7 +582,7 @@ def _enrich_macro_snapshot(macro: dict) -> None:
         print(f"BTC correlation calculation failed: {exc}", file=sys.stderr)
 
 
-def run_macro_close(state: dict, chat_id: str, force: bool = False) -> None:
+def run_macro_close(state: dict, channels: list[dict], force: bool = False) -> None:
     new_york_now = datetime.now(NEW_YORK)
     if not force and new_york_now.weekday() < 5 and (new_york_now.hour, new_york_now.minute) < (16, 10):
         print("US cash session has not closed; waiting for the next macro cron.")
@@ -467,19 +593,16 @@ def run_macro_close(state: dict, chat_id: str, force: bool = False) -> None:
     macro = data_fetcher.fetch_macro_snapshot()
     _enrich_macro_snapshot(macro)
     chart_path = chart_generator.generate_macro_chart(macro)
-    caption = narrative_generator.generate_macro(macro)
-    posted = _publish(chat_id, [chart_path], caption)
-    state_manager.append_post_log({
-        "timestamp": time.time(),
-        "mode": "macro_close",
-        "caption": caption,
-        "message_id": posted.get("message_id"),
-    })
+    _publish_localized(
+        channels, [chart_path],
+        lambda lang: narrative_generator.generate_macro(macro, lang),
+        "macro_close",
+    )
     _mark_slot(state, "macro_close")
     print("Posted macro close.")
 
 
-def run_daily_pulse(state: dict, chat_id: str, force: bool = False) -> None:
+def run_daily_pulse(state: dict, channels: list[dict], force: bool = False) -> None:
     if not force and _slot_already_posted(state, "daily_pulse"):
         print("Today's daily pulse was already posted; skipping duplicate.")
         return
@@ -495,13 +618,16 @@ def run_daily_pulse(state: dict, chat_id: str, force: bool = False) -> None:
         trending = []
 
     chart_path = chart_generator.generate_pulse_chart(derivatives_rows)
-    caption = narrative_generator.generate_daily_pulse(derivatives_rows, trending)
-    _publish(chat_id, [chart_path], caption)
+    _publish_localized(
+        channels, [chart_path],
+        lambda lang: narrative_generator.generate_daily_pulse(derivatives_rows, trending, lang),
+        "daily_pulse",
+    )
     _mark_slot(state, "daily_pulse")
     print("Posted daily derivatives pulse.")
 
 
-def run_weekly_digest(state: dict, chat_id: str, force: bool = False) -> None:
+def run_weekly_digest(state: dict, channels: list[dict], force: bool = False) -> None:
     if not force and datetime.now(ROME).weekday() != config.WEEKLY_DIGEST_WEEKDAY:
         print("Not the weekly digest's scheduled day; skipping.")
         return
@@ -544,16 +670,18 @@ def run_weekly_digest(state: dict, chat_id: str, force: bool = False) -> None:
         chart_generator.generate_market_structure_chart(dominance_history, feargreed_history),
         chart_generator.generate_liquidity_chart(total_mcap_history, stablecoin_history),
     ]
-    caption = narrative_generator.generate_weekly_digest(
-        weekly_rows, scoreboard_rows, dominance_history, feargreed_history,
-        total_mcap_history, stablecoin_history,
+    _publish_localized(
+        channels, chart_paths,
+        lambda lang: narrative_generator.generate_weekly_digest(
+            weekly_rows, scoreboard_rows, dominance_history, feargreed_history,
+            total_mcap_history, stablecoin_history, lang),
+        "weekly_digest",
     )
-    _publish(chat_id, chart_paths, caption)
     _mark_slot_week(state, "weekly_digest")
     print("Posted weekly digest.")
 
 
-def run_signal_scorecard(state: dict, chat_id: str, force: bool = False) -> None:
+def run_signal_scorecard(state: dict, channels: list[dict], force: bool = False) -> None:
     """Weekly standalone track record of the hypothetical scenarios. Reads the
     same posts_log the on-close replies write, so the two can never disagree."""
     if not force and datetime.now(ROME).weekday() != config.SIGNAL_SCORECARD_WEEKDAY:
@@ -567,8 +695,11 @@ def run_signal_scorecard(state: dict, chat_id: str, force: bool = False) -> None
     closed = signal_record._load_closed_signals()
     scorecard = signal_record.compute_scorecard(closed, open_count=open_count)
     chart_path = chart_generator.generate_signal_scorecard_chart(scorecard, closed)
-    caption = narrative_generator.generate_signal_scorecard(scorecard)
-    _publish(chat_id, [chart_path], caption)
+    _publish_localized(
+        channels, [chart_path],
+        lambda lang: narrative_generator.generate_signal_scorecard(scorecard, lang),
+        "signal_scorecard",
+    )
     _mark_slot_week(state, "signal_scorecard")
     print(f"Posted signal scorecard ({scorecard['closed_count']} closed, {open_count} open).")
 
@@ -603,7 +734,7 @@ def _watch_backdrop(state: dict) -> dict:
     return backdrop
 
 
-def run_what_to_watch(state: dict, chat_id: str, force: bool = False) -> None:
+def run_what_to_watch(state: dict, channels: list[dict], force: bool = False) -> None:
     """Forward-looking weekly post: which assets sit closest to a decision level,
     with the broad backdrop. Built entirely from data the pipeline already fetches."""
     if not force and datetime.now(ROME).weekday() != config.WHAT_TO_WATCH_WEEKDAY:
@@ -651,8 +782,11 @@ def run_what_to_watch(state: dict, chat_id: str, force: bool = False) -> None:
 
     backdrop = _watch_backdrop(state)
     chart_path = chart_generator.generate_watchlist_chart(watch_rows)
-    caption = narrative_generator.generate_what_to_watch(watch_rows, backdrop)
-    _publish(chat_id, [chart_path], caption)
+    _publish_localized(
+        channels, [chart_path],
+        lambda lang: narrative_generator.generate_what_to_watch(watch_rows, backdrop, lang),
+        "what_to_watch",
+    )
     _mark_slot_week(state, "what_to_watch")
     print(f"Posted what-to-watch ({len(watch_rows)} assets flagged).")
 
@@ -689,7 +823,7 @@ def _automatic_mode() -> str:
 
 def run(mode: str = "auto", force: bool = False) -> None:
     state = state_manager.load_state()
-    chat_id = _require_env("TELEGRAM_CHANNEL")
+    channels = _resolve_channels()
     resolved = _automatic_mode() if mode == "auto" else mode
     modes = (
         ["market_map", "daily_pulse", "deep_dive", "macro_close", "weekly_digest",
@@ -710,7 +844,7 @@ def run(mode: str = "auto", force: bool = False) -> None:
     try:
         for selected in modes:
             try:
-                handlers[selected](state, chat_id, force=force)
+                handlers[selected](state, channels, force=force)
             except Exception as exc:
                 print(f"ERROR in {selected}: {exc}", file=sys.stderr)
                 if len(modes) == 1:
@@ -719,13 +853,6 @@ def run(mode: str = "auto", force: bool = False) -> None:
     finally:
         state_manager.save_state(state)
     print("State saved.")
-
-
-def _require_env(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeError(f"Missing required environment variable: {name}")
-    return value
 
 
 def _arguments() -> argparse.Namespace:

@@ -323,17 +323,23 @@ class NarrativeTests(unittest.TestCase):
         self.assertLessEqual(len(result), config.TELEGRAM_CAPTION_LIMIT)
         self.assertTrue(result.endswith(config.DISCLAIMER))
 
-    def test_disclaimer_is_a_follow_link_not_a_warning(self):
-        self.assertIn(config.CHANNEL_URL, config.DISCLAIMER)
-        self.assertIn("Follow", config.DISCLAIMER)
+    def test_disclaimer_links_the_channel_name_not_a_warning(self):
+        self.assertIn(config.CHANNELS[0]["url"], config.DISCLAIMER)
+        self.assertIn(config.CHANNELS[0]["name"], config.DISCLAIMER)  # "To the Moon 🚀"
         self.assertNotIn("financial advice", config.DISCLAIMER)
+        self.assertNotIn("Follow", config.DISCLAIMER)
+
+    def test_farsi_disclaimer_links_the_farsi_channel(self):
+        fa = config.DISCLAIMERS["fa"]
+        self.assertIn("https://t.me/crypro_market_farsi", fa)
+        self.assertIn("تحلیل بازار کریپتو", fa)
 
     def test_fit_caption_escapes_html_so_the_follow_link_still_parses(self):
         result = narrative_generator._fit_caption("📈 S&P 500 vs <BTC> is a common comparison")
         self.assertIn("S&amp;P 500", result)
         self.assertIn("&lt;BTC&gt;", result)
         # The disclaimer's own anchor tag must stay raw HTML, not get escaped.
-        self.assertIn(f'<a href="{config.CHANNEL_URL}">', result)
+        self.assertIn(f'<a href="{config.CHANNELS[0]["url"]}">', result)
 
     def test_empty_ai_response_uses_titled_factual_fallback(self):
         response = SimpleNamespace(
@@ -364,6 +370,34 @@ class NarrativeTests(unittest.TestCase):
         self.assertNotIn("+0.0120%", result)
         self.assertNotIn("$6,800,000,000", result)
         self.assertTrue(result.endswith(config.DISCLAIMER))
+
+    def test_daily_pulse_farsi_fallback_uses_farsi_and_farsi_disclaimer(self):
+        derivatives_rows = [
+            {"ticker": "BTC", "funding_rate": 0.012, "open_interest": 6.8e9, "market": "Binance (Futures)"},
+            {"ticker": "ETH", "funding_rate": -0.004, "open_interest": 4.5e9, "market": "Binance (Futures)"},
+        ]
+        trending = [{"name": "Some Coin", "symbol": "SC", "market_cap_rank": 120, "change_24h": 12.0}]
+        with patch.object(narrative_generator, "_client", side_effect=RuntimeError("no network in tests")):
+            result = narrative_generator.generate_daily_pulse(derivatives_rows, trending, language="fa")
+        self.assertIn("BTC", result)                       # tickers stay Latin
+        self.assertIn("فاندینگ", result)                    # body is Farsi
+        self.assertTrue(result.endswith(config.DISCLAIMERS["fa"]))
+
+    def test_signal_post_farsi_uses_farsi_signal_disclaimer(self):
+        result = narrative_generator.generate_signal_post(
+            "ETH", "1d", "long", 1800.0, 1900.0, 1700.0, "bullish: trend up", 55.0, language="fa"
+        )
+        self.assertIn("لانگ", result)
+        self.assertIn("ETH", result)
+        self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMERS["fa"]))
+
+    def test_followup_localizes_structured_event(self):
+        event = {"side": "above", "level": 110.0, "price": 113.0}
+        en = narrative_generator.generate_followup("BTC", "4h", event, language="en")
+        fa = narrative_generator.generate_followup("BTC", "4h", event, language="fa")
+        self.assertIn("resistance", en)
+        self.assertIn("مقاومت", fa)
+        self.assertTrue(fa.endswith(config.DISCLAIMERS["fa"]))
 
     def test_weekly_digest_falls_back_without_network(self):
         weekly_rows = [

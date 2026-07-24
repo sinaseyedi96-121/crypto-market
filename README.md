@@ -32,6 +32,25 @@ All goal of these posts are educational only, and not financial advice.
 If you want to enter a trading business, worth a proper conversation with
 someone who knows financial-services regulation first.
 
+## Bilingual publishing (English + Farsi)
+
+The same bot publishes every post to two channels: an English channel and a
+Farsi channel. The chart image is shared between them — numbers are numbers —
+so only the caption text is localized. Captions are generated natively in each
+language (a Farsi output directive on the DeepSeek prompt), and every
+deterministic fallback, headline, and disclaimer has a Farsi variant, so the
+Farsi channel stays coherent even when DeepSeek is unavailable. Each post's
+footer links back to its own channel by name ("To the Moon 🚀" / "تحلیل بازار
+کریپتو").
+
+Channels are configured in `config.CHANNELS`. The English channel
+(`TELEGRAM_CHANNEL`) is required; the Farsi channel (`TELEGRAM_CHANNEL_FA`) is
+optional — if its secret isn't set, the pipeline logs a notice and publishes to
+English only. Per-channel Telegram failures are isolated, so one channel timing
+out never blocks the other, and threaded replies (follow-ups, hypothetical
+scenario opens/closes) track a separate message ID per channel. Charts keep
+their English labels; only the caption is translated.
+
 ## Hypothetical trade posts (educational)
 
 The deep-dive posts include a hypothetical long/short scenario derived from
@@ -69,7 +88,9 @@ review as the PR description, for a human to read and merge.
 4. **Add required repo secrets** — Settings → Secrets and variables → Actions:
    - `DEEPSEEK_KEY`
    - `TELEGRAM_TOKEN`
-   - `TELEGRAM_CHANNEL` (e.g. `@your_channel` or the numeric chat ID)
+   - `TELEGRAM_CHANNEL` (English channel, e.g. `@your_channel` or the numeric chat ID)
+   - `TELEGRAM_CHANNEL_FA` (optional Farsi channel; omit to publish English only).
+     The bot must be an admin of every channel it posts to.
 
 5. **Optional data key:** `COINGECKO_API_KEY` — a free Demo API key is
    recommended for reliable market-map and fallback data.

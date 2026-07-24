@@ -62,6 +62,7 @@ jobs:
           DEEPSEEK_KEY: ${{ secrets.DEEPSEEK_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          TELEGRAM_CHANNEL_FA: ${{ secrets.TELEGRAM_CHANNEL_FA }}
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
           POST_MODE: ${{ github.event.inputs.mode || 'auto' }}
           CRON_SCHEDULE: ${{ github.event.schedule }}
