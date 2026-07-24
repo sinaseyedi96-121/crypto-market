@@ -8,6 +8,7 @@ import matplotlib.image as mpimg
 import numpy as np
 import pandas as pd
 
+import bluesky_publisher
 import chart_generator
 import config
 import data_fetcher
@@ -481,6 +482,53 @@ class NarrativeTests(unittest.TestCase):
         self.assertIn("WHAT TO WATCH", result)
         self.assertIn("BTC", result)
         self.assertTrue(result.endswith(config.DISCLAIMER))
+
+
+class BlueskyTests(unittest.TestCase):
+    def test_is_configured_requires_both_secrets(self):
+        with patch.dict(os.environ, {"BLUESKY_HANDLE": "", "BLUESKY_APP_PASSWORD": ""}, clear=False):
+            self.assertFalse(bluesky_publisher.is_configured())
+        with patch.dict(os.environ, {"BLUESKY_HANDLE": "h.bsky.social", "BLUESKY_APP_PASSWORD": "pw"}, clear=False):
+            self.assertTrue(bluesky_publisher.is_configured())
+
+    def test_plain_text_strips_footer_link_and_unescapes(self):
+        caption = '📈 S&amp;P 500 firms up\n\n<a href="https://t.me/x">To the Moon 🚀</a>'
+        plain = narrative_generator.plain_text(caption)
+        self.assertEqual(plain, "📈 S&P 500 firms up")
+        self.assertNotIn("<a", plain)
+
+    def test_bluesky_caption_fallback_is_headline_within_budget(self):
+        source = "📊 CRYPTO MARKET SPLITS: MOMENTUM IS SHIFTING\n\nlong body " + "x" * 500
+        with patch.object(narrative_generator, "_client", side_effect=RuntimeError("offline")):
+            text = narrative_generator.generate_bluesky_caption(source, max_len=120)
+        self.assertLessEqual(len(text), 120)
+        self.assertIn("CRYPTO MARKET SPLITS", text)
+
+    def test_compose_link_facet_covers_exact_url_bytes(self):
+        text, facets = bluesky_publisher._compose(
+            "📈 Stocks firm up while the dollar eases",
+            "https://t.me/cryptomarket_bit", "📲 Full analysis on Telegram")
+        self.assertEqual(len(facets), 1)
+        idx = facets[0]["index"]
+        encoded = text.encode("utf-8")
+        # The facet byte-range must map back to exactly the link label text.
+        self.assertEqual(encoded[idx["byteStart"]:idx["byteEnd"]].decode("utf-8"),
+                         "📲 Full analysis on Telegram")
+        self.assertEqual(facets[0]["features"][0]["uri"], "https://t.me/cryptomarket_bit")
+
+    def test_compose_trims_to_300_graphemes(self):
+        text, _ = bluesky_publisher._compose(
+            "x" * 400, "https://t.me/c", "link")
+        self.assertLessEqual(len(text), bluesky_publisher.POST_GRAPHEME_LIMIT)
+
+    def test_prepare_image_bytes_respects_blob_limit(self):
+        frame = synthetic_market()
+        path = chart_generator.generate_market_map_chart(
+            [{"ticker": t, "price": 100 + i, "change_24h": i - 3}
+             for i, t in enumerate(["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "TRX", "HYPE", "LEO", "ZEC"])]
+        )
+        data = bluesky_publisher._prepare_image_bytes(path, limit=200_000)
+        self.assertLessEqual(len(data), 200_000)
 
 
 class ChartTests(unittest.TestCase):

@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+import bluesky_publisher
 import chart_generator
 import config
 import data_fetcher
@@ -86,6 +87,7 @@ def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe
     )
 
     signal_message_ids = {}
+    en_caption = None
     for channel in channels:
         lang = channel["language"]
         reply_to = chart_message_ids.get(lang)
@@ -96,6 +98,8 @@ def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe
                 asset["ticker"], timeframe, direction, entry, target, stop,
                 analysis["trend"], analysis["rsi"], language=lang,
             )
+            if lang == "en":
+                en_caption = caption
             posted = telegram_publisher.reply_with_photo(
                 channel["chat_id"], reply_to, signal_chart, caption)
             signal_message_ids[lang] = posted.get("message_id")
@@ -130,6 +134,7 @@ def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe
         "message_ids": signal_message_ids,
         "message_id": signal_message_ids.get("en"),
     })
+    _post_to_bluesky(en_caption, [signal_chart], "signal_open", signal=True)
     print(f"Opened hypothetical {direction} scenario for {asset['ticker']}.")
 
 
@@ -234,17 +239,51 @@ def _message_ids(obj: dict | None) -> dict:
     return {"en": legacy} if legacy else {}
 
 
+def _post_to_bluesky(source_caption: str | None, image_paths: list[str] | None,
+                     mode: str, signal: bool = False) -> None:
+    """Mirror an English post to Bluesky as a concise, standalone teaser with a
+    link back to the Telegram channel. No-op unless the Bluesky secrets are set;
+    failures never affect Telegram publishing. `signal=True` keeps the mandatory
+    hypothetical/educational framing on scenario posts, which the 300-char
+    compression would otherwise drop."""
+    if not source_caption or not bluesky_publisher.is_configured():
+        return
+    try:
+        source_plain = narrative_generator.plain_text(source_caption)
+        teaser = narrative_generator.generate_bluesky_caption(
+            source_plain, max_len=200 if signal else 250)
+        if signal:
+            teaser = f"{teaser} ⚠️ Hypothetical & educational, not advice."
+        posted = bluesky_publisher.post(
+            teaser, image_paths,
+            link_url=config.CHANNELS[0]["url"], link_label="📲 Full analysis on Telegram")
+        state_manager.append_post_log({
+            "timestamp": time.time(),
+            "mode": "bluesky",
+            "content_mode": mode,
+            "caption": teaser,
+            "uri": (posted or {}).get("uri"),
+        })
+        print(f"Mirrored {mode} to Bluesky.")
+    except Exception as exc:
+        print(f"ERROR mirroring {mode} to Bluesky: {exc}", file=sys.stderr)
+
+
 def _publish_localized(channels: list[dict], image_paths: list[str], caption_for,
-                       mode: str, log_extra: dict | None = None) -> dict:
-    """Publish the same chart(s) to every channel with a per-language caption.
-    Charts are shared (numbers are numbers); only the caption is localized.
-    Per-channel failures are isolated so one channel can't sink the others.
+                       mode: str, log_extra: dict | None = None,
+                       bluesky_signal: bool = False) -> dict:
+    """Publish the same chart(s) to every channel with a per-language caption,
+    then mirror the English caption to Bluesky (if configured). Charts are shared
+    (numbers are numbers); only the caption is localized. Per-channel failures are
+    isolated so one channel can't sink the others.
     Returns {language: posted_result} for the channels that succeeded."""
     results = {}
+    captions = {}
     for channel in channels:
         lang = channel["language"]
         try:
             caption = caption_for(lang)
+            captions[lang] = caption
             posted = telegram_publisher.post_charts(channel["chat_id"], image_paths, caption)
             results[lang] = posted
             log = {"timestamp": time.time(), "mode": mode, "language": lang,
@@ -256,6 +295,7 @@ def _publish_localized(channels: list[dict], image_paths: list[str], caption_for
             print(f"ERROR publishing {mode} to '{lang}' channel: {exc}", file=sys.stderr)
     if not results:
         raise RuntimeError(f"Failed to publish {mode} to any channel")
+    _post_to_bluesky(captions.get("en"), image_paths, mode, signal=bluesky_signal)
     return results
 
 
@@ -287,8 +327,10 @@ def run_market_map(state: dict, channels: list[dict], force: bool = False) -> No
 
 def _post_followup(channels: list[dict], ticker: str, timeframe: str,
                    previous: dict, followup: dict) -> None:
-    """Reply with a level-break follow-up under each channel's original post."""
+    """Reply with a level-break follow-up under each channel's original post,
+    and mirror the English note to Bluesky as a standalone post."""
     prev_ids = _message_ids(previous)
+    en_text = None
     for channel in channels:
         lang = channel["language"]
         reply_to = prev_ids.get(lang)
@@ -296,6 +338,8 @@ def _post_followup(channels: list[dict], ticker: str, timeframe: str,
             continue
         try:
             text = narrative_generator.generate_followup(ticker, timeframe, followup, language=lang)
+            if lang == "en":
+                en_text = text
             posted = telegram_publisher.reply_to_message(channel["chat_id"], reply_to, text)
             state_manager.append_post_log({
                 "timestamp": time.time(),
@@ -308,6 +352,7 @@ def _post_followup(channels: list[dict], ticker: str, timeframe: str,
             })
         except Exception as exc:
             print(f"ERROR posting {ticker} follow-up to '{lang}' channel: {exc}", file=sys.stderr)
+    _post_to_bluesky(en_text, None, "followup")
     print(f"Posted {ticker} level follow-up.")
 
 
@@ -425,6 +470,7 @@ def _close_open_signal(state: dict, channels: list[dict], asset: dict,
 
     signal_ids = _message_ids(open_signal)
     canonical_logged = False
+    en_caption = None
     for channel in channels:
         lang = channel["language"]
         reply_to = signal_ids.get(lang)
@@ -437,6 +483,8 @@ def _close_open_signal(state: dict, channels: list[dict], asset: dict,
                 open_signal["entry"], price, outcome, r_multiple, close_time,
                 record_line=record_line, language=lang,
             )
+            if lang == "en":
+                en_caption = outcome_caption
             outcome_posted = telegram_publisher.reply_to_message(
                 channel["chat_id"], reply_to, outcome_caption)
             state_manager.append_post_log({
@@ -463,6 +511,7 @@ def _close_open_signal(state: dict, channels: list[dict], asset: dict,
         print(f"Could not post {asset['ticker']} scenario close on any channel; will retry.")
         return
     state_manager.close_signal(state, asset["symbol"])
+    _post_to_bluesky(en_caption, None, "signal_close", signal=True)
     print(f"Closed hypothetical {open_signal['direction']} scenario for "
           f"{asset['ticker']}: {outcome} ({r_multiple:+.2f}R).")
 
@@ -698,7 +747,7 @@ def run_signal_scorecard(state: dict, channels: list[dict], force: bool = False)
     _publish_localized(
         channels, [chart_path],
         lambda lang: narrative_generator.generate_signal_scorecard(scorecard, lang),
-        "signal_scorecard",
+        "signal_scorecard", bluesky_signal=True,
     )
     _mark_slot_week(state, "signal_scorecard")
     print(f"Posted signal scorecard ({scorecard['closed_count']} closed, {open_count} open).")

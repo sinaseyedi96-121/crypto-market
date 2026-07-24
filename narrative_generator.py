@@ -119,6 +119,14 @@ Write 6 or 7 short lines. {_FORMAT_RULES}
 Explain why each highlighted asset is worth watching: what a decisive break or hold of the level it is approaching would actually signal, and what a stretched or washed-out momentum reading tends to precede — a pause or shakeout, not an automatic reversal. Add the broad backdrop when supplied: the direction of BTC dominance, the fear or greed mood, and whether leverage looks crowded, and what each implies for the week. Teach one idea about watching decision levels rather than chasing price. This is educational context, not a forecast.
 """
 
+BLUESKY_PROMPT = (
+    "You compress a longer crypto post into a single Bluesky post. Keep the one most useful, "
+    "genuinely educational insight and drop everything secondary. Do not restate specific numbers, "
+    "prices, or percentages. Write natural English, at most two short sentences, one leading emoji "
+    "is fine, no hashtags, no markdown. Never give advice or predict a price. Output ONLY the post "
+    "text, and keep it well under the character budget you are given."
+)
+
 
 # ---- Localization helpers ----------------------------------------------------
 
@@ -876,6 +884,46 @@ def generate_signal_scorecard(scorecard: dict, language: str = "en") -> str:
     headline = _pick(language, "🧪 HYPOTHETICAL SIGNAL SCORECARD", "🧪 کارنامه‌ی سیگنال‌های فرضی")
     return _complete(SIGNAL_SCORECARD_PROMPT, context, headline, fallback,
                      _signal_disclaimer(language), language=language)
+
+
+_FOOTER_LINK_RE = re.compile(r'\s*<a\s+href="[^"]*">.*?</a>\s*$', re.DOTALL)
+
+
+def plain_text(caption: str) -> str:
+    """Strip the HTML channel-link footer and unescape entities, so a caption
+    built for Telegram (HTML parse mode) can seed a plain-text Bluesky post."""
+    without_footer = _FOOTER_LINK_RE.sub("", caption)
+    return html.unescape(without_footer).strip()
+
+
+def generate_bluesky_caption(source_text: str, max_len: int = 250) -> str:
+    """Compress an already-written English caption into a short Bluesky teaser
+    (English only). Falls back to the source's headline if DeepSeek is down."""
+    stripped = source_text.strip()
+    headline = stripped.splitlines()[0] if stripped else "📊 Crypto market update"
+    fallback = headline[:max_len].rstrip()
+    context = (
+        f"Character budget: {max_len}. Compress this crypto post into one Bluesky post:\n\n{stripped}"
+    )
+    body = ""
+    try:
+        response = _client().chat.completions.create(
+            model=config.DEEPSEEK_MODEL,
+            messages=[
+                {"role": "system", "content": BLUESKY_PROMPT},
+                {"role": "user", "content": context},
+            ],
+            max_tokens=200,
+        )
+        body = (response.choices[0].message.content or "").strip().strip('"').strip()
+    except Exception as exc:
+        print(f"DeepSeek Bluesky caption unavailable; using headline: {exc}")
+    if len(body) < 10:
+        body = fallback
+    body = " ".join(body.split())          # collapse to a single line
+    if len(body) > max_len:
+        body = body[: max_len - 1].rstrip() + "…"
+    return body
 
 
 def generate_what_to_watch(watch_rows: list[dict], backdrop: dict | None = None,

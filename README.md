@@ -51,6 +51,24 @@ out never blocks the other, and threaded replies (follow-ups, hypothetical
 scenario opens/closes) track a separate message ID per channel. Charts keep
 their English labels; only the caption is translated.
 
+## Bluesky mirror (optional)
+
+The English content is also mirrored to Bluesky (`bluesky_publisher.py`, AT
+Protocol) when `BLUESKY_HANDLE` and `BLUESKY_APP_PASSWORD` are set; without them
+Bluesky is skipped entirely. Because Bluesky caps a post at 300 characters, each
+mirror is a **purpose-built concise caption** (a separate short DeepSeek pass on
+the English post) that teaches one idea and links back to the Telegram channel
+via a rich-text facet — not the full Telegram caption. Chart images are
+recompressed under Bluesky's ~1 MB blob limit (up to 4 images per post). Every
+kind of English post is mirrored (daily/weekly posts, 4h alerts, and hypothetical
+scenario opens/closes); scenario posts carry an explicit hypothetical/educational
+tag. Bluesky failures never affect Telegram publishing.
+
+To set it up: log in to the Bluesky account, go to **Settings → Privacy and
+Security → App Passwords**, add one, and store it as the `BLUESKY_APP_PASSWORD`
+secret (with `BLUESKY_HANDLE`, e.g. `tothemooncrypto.bsky.social`). Use the app
+password, never the real account password.
+
 ## Hypothetical trade posts (educational)
 
 The deep-dive posts include a hypothetical long/short scenario derived from
@@ -91,6 +109,10 @@ review as the PR description, for a human to read and merge.
    - `TELEGRAM_CHANNEL` (English channel, e.g. `@your_channel` or the numeric chat ID)
    - `TELEGRAM_CHANNEL_FA` (optional Farsi channel; omit to publish English only).
      The bot must be an admin of every channel it posts to.
+   - `BLUESKY_HANDLE` and `BLUESKY_APP_PASSWORD` (optional; mirror English content
+     to Bluesky). Create an app password in Bluesky → Settings → Privacy and
+     Security → App Passwords — never the real account password. Omit both to
+     skip Bluesky.
 
 5. **Optional data key:** `COINGECKO_API_KEY` — a free Demo API key is
    recommended for reliable market-map and fallback data.
@@ -173,5 +195,6 @@ rest of the weekend — plus up to two more opportunistic alert posts on any
 day when a confirmed technical event happens. Ten separate asset posts are
 intentionally avoided: the market map batches breadth into one chart, the
 deep dive uses one two-chart album, and the weekly digest batches four charts
-into one album. Publishing is Telegram-only; no X, Bluesky, Discord, or other
-social integration is active.
+into one album. Publishing goes to Telegram (English + optional Farsi channel)
+and, optionally, Bluesky for the English content; no X or Discord integration is
+active.
