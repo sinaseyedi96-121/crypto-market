@@ -32,7 +32,7 @@ DEEP_DIVE_ROTATION = [
 ]
 DEEP_DIVE_TIMEFRAME = "1d"
 CANDLE_LIMIT = 500                         # enough history for indicators, long-term levels, and a
-                                            # deep signal-target search (see find_extended_target)
+                                            # deep signal-target search (see find_extended_targets)
 
 # Tickers checked for funding rate / open interest in the daily pulse post.
 # Same tracked universe as ASSETS, minus LEO (an exchange token with no
@@ -84,19 +84,36 @@ WATCH_MAX_ITEMS = 6
 
 # ---- Hypothetical trade posts (educational only, see README) ----
 # One open hypothetical scenario per asset at a time; entry is the confirmed
-# deep-dive close, stop is the nearby support/resistance level, and target is
-# the farthest pivot level found across all fetched history that still clears
-# MIN_SIGNAL_RISK_REWARD (see indicators.find_extended_target). If nothing
-# clears it, no signal is opened for that asset that day.
+# deep-dive close, the initial stop is the nearby support/resistance level, and
+# targets are the pivot levels found across all fetched history — nearest to
+# farthest, capped at SIGNAL_MAX_TARGETS — whose farthest member still clears
+# MIN_SIGNAL_RISK_REWARD (see indicators.find_extended_targets). If nothing
+# clears it, no signal is opened for that asset that day. As each target is
+# reached the position is treated as partially closed and the stop ladders up
+# (to breakeven after the first target, then to the prior target after each
+# one after that) so the remaining runner can never give back more than it has
+# already banked.
 MAX_OPEN_SIGNALS_PER_ASSET = 1
 MIN_SIGNAL_RISK_REWARD = 3.0
+SIGNAL_MAX_TARGETS = 4
+# Illustrative position sizing shown alongside each scenario: risking this % of
+# a fixed hypothetical example account against the entry-to-stop distance, with
+# the resulting leverage capped here. A worked example of a standard
+# risk-based sizing convention, not sized advice for the reader — see
+# SIGNAL_DISCLAIMERS.
+SIGNAL_RISK_PER_TRADE_PCT = 1.0
+SIGNAL_MAX_LEVERAGE = 5.0
 SIGNAL_DISCLAIMERS = {
     "en": (
         "\n\n⚠️ Hypothetical educational scenario, not a trade recommendation. "
+        "Position size/leverage figures are worked against a fixed hypothetical "
+        "example account, not a recommendation for your own capital. "
         "Not financial advice."
     ),
     "fa": (
-        "\n\n⚠️ سناریوی آموزشی و فرضی؛ نه توصیه‌ی معاملاتی است و نه مشاوره‌ی مالی."
+        "\n\n⚠️ سناریوی آموزشی و فرضی؛ نه توصیه‌ی معاملاتی است و نه مشاوره‌ی مالی. "
+        "اعداد اندازه‌ی پوزیشن و اهرم بر پایه‌ی یک حساب فرضی و ثابت محاسبه شده‌اند و "
+        "توصیه‌ای برای سرمایه‌ی شما نیستند."
     ),
 }
 SIGNAL_DISCLAIMER = SIGNAL_DISCLAIMERS["en"]   # default/back-compat (English)

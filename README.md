@@ -21,8 +21,9 @@ broad U.S. dollar index, derivatives positioning, and crypto-wide liquidity.
   (ATR/Bollinger), and the Fear & Greed Index
 - If price later breaks a zone flagged in an earlier post, a factual
   follow-up reply is posted under that original message
-- A hypothetical long/short scenario per deep-dive asset, closed out and
-  scored with a factual reply once price confirms through target or stop
+- A hypothetical long/short scenario per deep-dive asset, with a scaled ladder
+  of targets/stops and an illustrative position size/leverage figure, updated
+  with a factual reply as each target or stop is reached
   (see "Hypothetical trade posts" below)
 
 ## Goals
@@ -71,17 +72,38 @@ password, never the real account password.
 
 ## Hypothetical trade posts (educational)
 
-The deep-dive posts include a hypothetical long/short scenario derived from
-the same support/resistance levels already shown on the chart: a hypothetical
-entry at the confirmed close, with the opposite level used as target and stop.
-When price later confirms a close through either level, a factual reply
-reports the outcome (target/stop hit, R multiple, time held).
+The deep-dive posts include a hypothetical long/short scenario built from the
+same chart already posted: a hypothetical entry at the confirmed close, an
+initial stop at the nearby support/resistance level, and a scaled ladder of
+1-4 targets — the pivot levels found across all fetched history, nearest to
+farthest, capped at `SIGNAL_MAX_TARGETS` — whose farthest member still clears
+`MIN_SIGNAL_RISK_REWARD`. If nothing clears that floor, no signal opens for
+that asset. Each level is labeled with why it was picked (a prior swing
+high/low, how many times price has tested it) rather than just plotted as a
+bare line, and the post states the trade's style (e.g. swing/position for the
+1D chart deep dives currently use) so it's clear this isn't a scalp call.
 
-This is explicitly labeled in every such post as a hypothetical, educational
-scenario — not a trade recommendation, not investment advice, and not an
-instruction to enter, exit, or size a position. The channel and this README
-both carry that disclaimer. No entry/target/stop is ever framed as something
-to act on.
+As price reaches each target, that slice of the position is treated as
+closed and the stop ladders up — to breakeven after the first target, then to
+the previous target after each one after that — so a factual reply is posted
+under the original scenario announcing which level was hit and where the stop
+now sits, and the runner can never give back more than it has already banked.
+When the final target or the (possibly-laddered) stop is eventually reached,
+a closing reply reports the blended outcome across every slice: how many of
+the targets were reached and the combined R multiple.
+
+Each scenario also states an illustrative position size and leverage: risking
+a fixed `SIGNAL_RISK_PER_TRADE_PCT` of a hypothetical example account against
+the entry-to-stop distance, with leverage capped at `SIGNAL_MAX_LEVERAGE`
+(when that cap binds, the post says so and the realized risk comes in under
+the target). This is a worked example of a standard risk-based sizing
+convention — not a recommendation for the reader's own capital or leverage
+choice.
+
+Every such post is explicitly labeled a hypothetical, educational scenario —
+not a trade recommendation and not investment advice; the channel and this
+README both carry that disclaimer, including on the position-size/leverage
+figures specifically.
 
 ## Content review
 

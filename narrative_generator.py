@@ -765,71 +765,222 @@ def generate_event_alert(ticker: str, price: float, event: dict, levels: dict,
     return _fit_caption(body, _disclaimer(language))
 
 
+# Trade-style label by the timeframe the scenario's chart is built on — purely
+# descriptive of how the underlying candles behave, not a recommendation.
+# Deep-dive signals are 1D today; the others are here so the label stays
+# correct if a signal is ever opened from a faster timeframe.
+_STYLE_LABELS = {
+    "1d": {
+        "en": "Swing/position trade — 1D structure, typically held days to weeks",
+        "fa": "معامله‌ی نوسانی/میان‌مدت — بر پایه‌ی ساختار ۱روزه، معمولاً چند روز تا چند هفته",
+    },
+    "4h": {
+        "en": "Short-term swing trade — 4H structure, typically held hours to a few days",
+        "fa": "معامله‌ی نوسانی کوتاه‌مدت — بر پایه‌ی ساختار ۴ساعته، معمولاً چند ساعت تا چند روز",
+    },
+    "1h": {
+        "en": "Intraday trade — 1H structure, typically held within a single day",
+        "fa": "معامله‌ی درون‌روزی — بر پایه‌ی ساختار ۱ساعته، معمولاً در طول یک روز",
+    },
+    "15m": {
+        "en": "Scalp trade — 15M structure, typically held minutes to a few hours",
+        "fa": "معامله‌ی اسکالپ — بر پایه‌ی ساختار ۱۵دقیقه‌ای، معمولاً چند دقیقه تا چند ساعت",
+    },
+}
+
+
+def _style_label(timeframe: str, language: str = "en") -> str:
+    labels = _STYLE_LABELS.get(timeframe)
+    if not labels:
+        return timeframe.upper()
+    return labels.get(language, labels["en"])
+
+
+def _pivot_word(direction: str, language: str = "en") -> str:
+    if language == "fa":
+        return "سقف نوسانی" if direction == "long" else "کف نوسانی"
+    return "swing high" if direction == "long" else "swing low"
+
+
+def _stop_reason(direction: str, language: str = "en") -> str:
+    if language == "fa":
+        return "زیر حمایت پیشین" if direction == "long" else "بالای مقاومت پیشین"
+    return "below prior support" if direction == "long" else "above prior resistance"
+
+
+def _touch_note(touches: int, language: str = "en") -> str:
+    if touches <= 1:
+        return ""
+    return f" (تست‌شده {touches} بار)" if language == "fa" else f" (tested {touches}×)"
+
+
+def _pct_move(price: float, entry: float) -> float:
+    return abs(price - entry) / entry * 100 if entry else 0.0
+
+
 def generate_signal_post(ticker: str, timeframe: str, direction: str, entry: float,
-                          target: float, stop: float, trend: str, rsi: float,
-                          language: str = "en") -> str:
+                          targets: list[dict], initial_stop: float, stop_touches: int,
+                          trend: str, rsi: float, sizing: dict, language: str = "en") -> str:
     """Deterministic hypothetical long/short scenario post (no AI call, so the
-    numbers can never drift from what was actually computed)."""
-    risk = abs(entry - stop)
-    reward = abs(target - entry)
-    reward_risk = reward / risk if risk else 0.0
+    numbers can never drift from what was actually computed). `targets` is the
+    scaled ladder from indicators.find_extended_targets, nearest to farthest;
+    as each is reached the stop ladders up (see main._stop_for_index) so a
+    reader knows this isn't just one static target/stop pair. `sizing` is
+    signal_record.compute_position_sizing's result — an illustrative
+    position size/leverage figure against a fixed hypothetical account, not
+    advice for the reader's own capital (see the disclaimer this post
+    carries)."""
     regime = _regime(language, trend)
     tf = timeframe.upper()
-    if language == "fa":
+    style = _style_label(timeframe, language)
+    stop_pct = _pct_move(initial_stop, entry)
+    stop_touch_note = _touch_note(stop_touches, language)
+    level_word = _pivot_word(direction, language)
+    final_rr = targets[-1]["r_multiple"]
+    lev = sizing["leverage"]
+    lev_label = f"{lev:.2g}x" if lev > 1 else "1x"
+
+    fa = language == "fa"
+    target_lines = []
+    for i, t in enumerate(targets):
+        pct = _pct_move(t["price"], entry)
+        touch_note = _touch_note(t["touches"], language)
+        is_final = i == len(targets) - 1
+        if fa:
+            reach = "نزدیک‌ترین" if i == 0 else ("دورترین، فراتر از آستانه‌ی پاداش به ریسک" if is_final else "دورتر")
+            label = f"هدف {i + 1}" + (" (نهایی)" if is_final else "")
+            target_lines.append(
+                f"🎯 {label}: {_price(t['price'])} · {pct:.1f}% فاصله از ورود · "
+                f"{reach} {level_word}{touch_note} · {t['r_multiple']:.2f}R"
+            )
+        else:
+            reach = "nearest" if i == 0 else ("farthest, clearing the reward:risk floor" if is_final else "further out")
+            label = f"TP{i + 1}" + (" (final)" if is_final else "")
+            target_lines.append(
+                f"🎯 {label}: {_price(t['price'])} · {pct:.1f}% move from entry · "
+                f"{reach} {level_word}{touch_note} · {t['r_multiple']:.2f}R"
+            )
+
+    cap_note = ""
+    if sizing.get("capped"):
+        cap_note = (" (اهرم محدود شده، پس ریسک واقعی کمتر از هدف معمول است)" if fa
+                    else " (leverage capped, so realized risk is below the usual target)")
+
+    if fa:
         arrow = "🟢 لانگ" if direction == "long" else "🔴 شورت"
         headline = f"🧪 سناریوی فرضی {_DIRECTION_FA[direction]} روی {ticker}"
-        body = (
-            f"{arrow} سناریو\n\n"
-            f"📈 مبنای روند: {regime}\n\n"
-            f"⚡ RSI: {rsi:.1f}\n\n"
-            f"💰 ورود: {_price(entry)}\n\n"
-            f"🎯 هدف: {_price(target)}\n\n"
-            f"🛑 حد ضرر: {_price(stop)}\n\n"
-            f"📐 پاداش به ریسک ~{reward_risk:.2f}\n\n"
-            f"🕒 کندل تأییدشده‌ی {tf}"
-        )
+        body = "\n\n".join([
+            f"{arrow} سناریو · 🧭 {style}",
+            f"📈 مبنای روند: {regime}",
+            f"⚡ RSI: {rsi:.1f}",
+            f"💰 ورود: {_price(entry)}",
+            f"🛑 حد ضرر اولیه: {_price(initial_stop)} · {stop_pct:.1f}% فاصله از ورود · "
+            f"{_stop_reason(direction, language)}{stop_touch_note}",
+            *target_lines,
+            f"📊 اندازه‌ی پوزیشن: {sizing['position_size_pct']:.0f}% از یک حساب فرضی با اهرم {lev_label}، "
+            f"ریسک ~{sizing['risk_pct']:.2g}% از آن در صورت خوردن حد ضرر{cap_note}",
+            f"📐 پاداش به ریسک تا هدف نهایی ~{final_rr:.2f}",
+            f"🕒 کندل تأییدشده‌ی {tf}",
+        ])
     else:
         arrow = "🟢 LONG" if direction == "long" else "🔴 SHORT"
         headline = f"🧪 {ticker} HYPOTHETICAL {direction.upper()} SCENARIO"
+        body = "\n\n".join([
+            f"{arrow} scenario · 🧭 {style}",
+            f"📈 Trend basis: {regime}",
+            f"⚡ RSI: {rsi:.1f}",
+            f"💰 Entry: {_price(entry)}",
+            f"🛑 Initial stop: {_price(initial_stop)} · {stop_pct:.1f}% move from entry · "
+            f"{_stop_reason(direction, language)}{stop_touch_note}",
+            *target_lines,
+            f"📊 Position size: {sizing['position_size_pct']:.0f}% of a hypothetical account at "
+            f"{lev_label} leverage, risking ~{sizing['risk_pct']:.2g}% of it if stopped{cap_note}",
+            f"📐 Reward:risk to final target ~{final_rr:.2f}",
+            f"🕒 {tf} confirmed candle",
+        ])
+    return _fit_caption(f"{headline}\n\n{body}", _signal_disclaimer(language))
+
+
+def generate_signal_partial(ticker: str, timeframe: str, direction: str, hit_targets: list[dict],
+                             new_stop: float, remaining_targets: list[dict], close_time: str,
+                             language: str = "en") -> str:
+    """Deterministic reply when a hypothetical scenario reaches one or more
+    targets but others remain open: names what was hit, where the stop now
+    sits (it ladders up — see main._stop_for_index), and what's left. Without
+    this, a multi-target scenario would stay silent until it fully closed."""
+    tf = timeframe.upper()
+    next_target = remaining_targets[0]
+    if language == "fa":
+        headline = f"📊 به‌روزرسانی سناریوی {ticker}: هدف خورد"
+        if len(hit_targets) == 1:
+            hit_line = (f"🎯 هدف خورد: {_price(hit_targets[0]['price'])} · "
+                        f"{hit_targets[0]['r_multiple']:.2f}R روی این بخش از پوزیشن")
+        else:
+            prices = "، ".join(_price(t["price"]) for t in hit_targets)
+            hit_line = f"🎯 اهداف خورد: {prices}"
         body = (
-            f"{arrow} scenario\n\n"
-            f"📈 Trend basis: {regime}\n\n"
-            f"⚡ RSI: {rsi:.1f}\n\n"
-            f"💰 Entry: {_price(entry)}\n\n"
-            f"🎯 Target: {_price(target)}\n\n"
-            f"🛑 Stop: {_price(stop)}\n\n"
-            f"📐 Reward:risk ~{reward_risk:.2f}\n\n"
-            f"🕒 {tf} confirmed candle"
+            f"{hit_line}\n\n"
+            f"🛑 حد ضرر جابه‌جا شد به {_price(new_stop)}\n\n"
+            f"👀 هدف بعدی: {_price(next_target['price'])} ({next_target['r_multiple']:.2f}R)\n\n"
+            f"🕒 بسته‌شدن تأییدشده‌ی {tf} · {close_time[:16]} UTC"
+        )
+    else:
+        headline = f"📊 {ticker} scenario update: target hit"
+        if len(hit_targets) == 1:
+            hit_line = (f"🎯 Target hit: {_price(hit_targets[0]['price'])} · "
+                        f"{hit_targets[0]['r_multiple']:.2f}R on that portion of the position")
+        else:
+            prices = ", ".join(_price(t["price"]) for t in hit_targets)
+            hit_line = f"🎯 Targets hit: {prices}"
+        body = (
+            f"{hit_line}\n\n"
+            f"🛑 Stop moved to {_price(new_stop)}\n\n"
+            f"👀 Next target: {_price(next_target['price'])} ({next_target['r_multiple']:.2f}R)\n\n"
+            f"🕒 Confirmed {tf} close · {close_time[:16]} UTC"
         )
     return _fit_caption(f"{headline}\n\n{body}", _signal_disclaimer(language))
 
 
 def generate_signal_outcome(ticker: str, timeframe: str, direction: str, entry: float,
                              exit_price: float, outcome: str, r_multiple: float,
-                             close_time: str, record_line: str | None = None,
-                             language: str = "en") -> str:
+                             close_time: str, targets_hit: int = 1, total_targets: int = 1,
+                             record_line: str | None = None, language: str = "en") -> str:
     """Deterministic factual close-out for a previously posted hypothetical
-    scenario. `record_line`, when supplied, appends the running track record so
-    each close reinforces the scorecard rather than reading as an isolated result."""
-    result_emoji = "✅" if outcome == "target" else "🛑"
+    scenario. `outcome` is "target" (every target reached), "stop" (stopped
+    before any target), or "partial_stop" (some targets banked, then the
+    remainder stopped out) — `r_multiple` is already the blended result
+    across every portion of the position. `record_line`, when supplied,
+    appends the running track record so each close reinforces the scorecard
+    rather than reading as an isolated result."""
+    result_emoji = "✅" if outcome == "target" else ("🟡" if outcome == "partial_stop" else "🛑")
     tf = timeframe.upper()
     if language == "fa":
-        label = "هدف خورد" if outcome == "target" else "حد ضرر خورد"
+        label = {
+            "target": "همه‌ی اهداف رسید",
+            "partial_stop": "بخشی از اهداف رسید، سپس حد ضرر خورد",
+            "stop": "حد ضرر خورد",
+        }[outcome]
         dir_fa = _DIRECTION_FA[direction]
         headline = f"📊 سناریوی فرضی {ticker} بسته شد: {label}"
         body = (
             f"{result_emoji} سناریوی {dir_fa}: {label}\n\n"
             f"💰 ورود {_price(entry)} ← بسته‌شدن {_price(exit_price)}\n\n"
-            f"📐 نتیجه: {r_multiple:+.2f}R\n\n"
+            f"🎯 اهداف رسیده: {targets_hit} از {total_targets}\n\n"
+            f"📐 نتیجه‌ی ترکیبی: {r_multiple:+.2f}R\n\n"
             f"🕒 بسته‌شدن تأییدشده‌ی {tf} · {close_time[:16]} UTC"
         )
     else:
-        label = "TARGET HIT" if outcome == "target" else "STOP HIT"
+        label = {
+            "target": "ALL TARGETS REACHED",
+            "partial_stop": "PARTIAL TARGET, THEN STOP",
+            "stop": "STOP HIT",
+        }[outcome]
         headline = f"📊 {ticker} HYPOTHETICAL SCENARIO CLOSED: {label}"
         body = (
             f"{result_emoji} {direction.capitalize()} scenario: {label.lower()}\n\n"
             f"💰 Entry {_price(entry)} → close {_price(exit_price)}\n\n"
-            f"📐 Result: {r_multiple:+.2f}R\n\n"
+            f"🎯 Targets reached: {targets_hit} of {total_targets}\n\n"
+            f"📐 Blended result: {r_multiple:+.2f}R\n\n"
             f"🕒 Confirmed {tf} close · {close_time[:16]} UTC"
         )
     if record_line:

@@ -35,11 +35,45 @@ def _load_closed_signals(path: str | None = None) -> list[dict]:
     return closed
 
 
+def compute_position_sizing(entry: float, stop: float,
+                            risk_pct: float = config.SIGNAL_RISK_PER_TRADE_PCT,
+                            max_leverage: float = config.SIGNAL_MAX_LEVERAGE) -> dict:
+    """Illustrative position size/leverage for a scenario's entry-to-stop
+    distance, against a fixed hypothetical example account (see
+    SIGNAL_DISCLAIMERS) — not sized advice for the reader's own capital.
+
+    Sizing follows the standard risk-based convention: position size is
+    whatever notional, as a % of the hypothetical account, makes the
+    entry-to-stop move cost exactly `risk_pct` of that account. When that
+    would require more than `max_leverage`, the position is capped at
+    `max_leverage` instead and the realized risk comes in under the target
+    (surfaced via `capped`/`risk_pct` so the caption can say so).
+    """
+    stop_distance_pct = abs(entry - stop) / entry * 100 if entry else 0.0
+    if stop_distance_pct <= 0:
+        return {"position_size_pct": 0.0, "leverage": 1.0, "risk_pct": 0.0, "capped": False}
+    leverage_needed = risk_pct / stop_distance_pct
+    capped = leverage_needed > max_leverage
+    leverage = min(leverage_needed, max_leverage)
+    position_size_pct = leverage * 100
+    realized_risk_pct = stop_distance_pct * leverage
+    return {
+        "position_size_pct": round(position_size_pct, 1),
+        "leverage": round(max(leverage, 1.0), 2),
+        "risk_pct": round(realized_risk_pct, 2),
+        "capped": capped,
+    }
+
+
 def compute_scorecard(closed: list[dict], open_count: int = 0) -> dict:
-    """Aggregate a list of signal_close records into a track-record summary."""
+    """Aggregate a list of signal_close records into a track-record summary.
+
+    Win/loss is classified by the sign of `r_multiple` rather than the
+    `outcome` label, so a scenario that partially hit targets before
+    eventually stopping out still lands in the right bucket."""
     total = len(closed)
-    wins = [p for p in closed if p.get("outcome") == "target"]
-    losses = [p for p in closed if p.get("outcome") == "stop"]
+    wins = [p for p in closed if float(p.get("r_multiple", 0.0)) > 0]
+    losses = [p for p in closed if float(p.get("r_multiple", 0.0)) <= 0]
     r_values = [float(p.get("r_multiple", 0.0)) for p in closed]
     best = max(closed, key=lambda p: float(p.get("r_multiple", 0.0))) if closed else None
     worst = min(closed, key=lambda p: float(p.get("r_multiple", 0.0))) if closed else None

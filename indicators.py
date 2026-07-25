@@ -131,7 +131,7 @@ def _pick_level(clusters: list[_LevelCluster], current_price: float, side: str,
 def _pivot_clusters(df: pd.DataFrame, lookback: int) -> tuple[list[_LevelCluster], list[_LevelCluster], float]:
     """Detects pivot highs/lows over the given lookback and merges nearby ones
     into clusters. Shared by find_key_levels (nearby walls for the chart) and
-    find_extended_target (farther levels for a signal's reward:risk target)."""
+    find_extended_targets (farther levels for a signal's reward:risk ladder)."""
     recent = df.tail(lookback)
     if len(recent) < config.PIVOT_WINDOW * 2 + 1:
         raise ValueError("Not enough candles to calculate pivot levels")
@@ -172,35 +172,54 @@ def find_key_levels(df: pd.DataFrame, lookback=config.LEVEL_LOOKBACK) -> dict:
     }
 
 
-def find_extended_target(df: pd.DataFrame, direction: str, entry: float, stop: float,
-                          min_reward_risk: float = config.MIN_SIGNAL_RISK_REWARD,
-                          lookback: int | None = None) -> float | None:
-    """Searches the farthest pivot level — across as much history as is
-    available, not just the near lookback used for support/resistance — that
-    still clears the minimum reward:risk ratio. Farther levels are tried
-    first so a signal captures as much of a legitimate move as the chart
-    history actually supports, instead of settling for the nearest wall.
-    Returns None if nothing in the available history clears the bar, in
-    which case no signal should be opened.
+def find_extended_targets(df: pd.DataFrame, direction: str, entry: float, stop: float,
+                           min_reward_risk: float = config.MIN_SIGNAL_RISK_REWARD,
+                           max_targets: int = config.SIGNAL_MAX_TARGETS,
+                           lookback: int | None = None) -> list[dict]:
+    """Searches pivot levels — across as much history as is available, not
+    just the near lookback used for support/resistance — for a scaled-target
+    ladder: the nearest-to-farthest legitimate levels between entry and the
+    farthest one that still clears the minimum reward:risk ratio. The floor
+    is applied the same way as before (checked from the farthest level
+    inward), so the last target returned is exactly what a single-target
+    search would have picked; nearer qualifying levels become TP1, TP2, ...
+    ahead of it. Capped at `max_targets` (nearest ones dropped first, so the
+    farthest/floor-clearing target is always kept). Returns [] if nothing in
+    the available history clears the bar, in which case no signal should be
+    opened.
     """
     risk = abs(entry - stop)
     if risk <= 0:
-        return None
+        return []
     lookback = len(df) if lookback is None else min(lookback, len(df))
     high_clusters, low_clusters, _ = _pivot_clusters(df, lookback)
     clusters = high_clusters if direction == "long" else low_clusters
     # Every cluster is already a verified local swing pivot (see _pivot_clusters),
     # so a single touch is still a legitimate level — unlike find_key_levels,
     # which prefers repeated touches, this is ranked by distance because the
-    # goal here is the farthest level that clears the reward:risk bar.
+    # goal here is a ladder out to the farthest level that clears the
+    # reward:risk bar.
     eligible = [
         cluster for cluster in clusters
         if (cluster.center > entry if direction == "long" else cluster.center < entry)
     ]
-    for cluster in sorted(eligible, key=lambda c: abs(c.center - entry), reverse=True):
-        if abs(cluster.center - entry) / risk >= min_reward_risk:
-            return round(cluster.center, 2)
-    return None
+    ordered = sorted(eligible, key=lambda c: abs(c.center - entry))  # nearest -> farthest
+    final_index = None
+    for i in range(len(ordered) - 1, -1, -1):
+        if abs(ordered[i].center - entry) / risk >= min_reward_risk:
+            final_index = i
+            break
+    if final_index is None:
+        return []
+    ladder = ordered[: final_index + 1][-max_targets:]
+    return [
+        {
+            "price": round(cluster.center, 2),
+            "r_multiple": round(abs(cluster.center - entry) / risk, 2),
+            "touches": cluster.touches,
+        }
+        for cluster in ladder
+    ]
 
 
 def rolling_correlation(price_a: pd.Series, price_b: pd.Series, window: int) -> float | None:

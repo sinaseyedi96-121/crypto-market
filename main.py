@@ -41,31 +41,95 @@ def _signal_direction(trend: str) -> str | None:
     return None
 
 
-def _evaluate_signal(signal: dict, price: float) -> tuple[str, float] | None:
-    """Checks a confirmed close against an open hypothetical signal's target/stop."""
+def _stop_for_index(signal: dict, idx: int) -> float:
+    """The stop that is (or would be) in force once `idx` targets have been
+    banked: the initial technical stop before any target, breakeven after the
+    first, then each further target locks in the one before it — so a runner
+    can never give back more than it has already banked."""
+    if idx == 0:
+        return signal["initial_stop"]
+    if idx == 1:
+        return signal["entry"]
+    return signal["targets"][idx - 2]["price"]
+
+
+def _active_stop(signal: dict) -> float:
+    return _stop_for_index(signal, signal["next_target_index"])
+
+
+def _signal_progress(signal: dict, price: float) -> dict | None:
+    """Checks a confirmed close against an open hypothetical signal's current
+    target ladder and active stop. Returns None if nothing has changed since
+    the last check, else one of:
+      {"event": "partial", "hit_indices": [...]}       - some target(s) reached, still open
+      {"event": "final_target", "hit_indices": [...]}  - the last target reached, fully closed
+      {"event": "stop"}                                 - active stop breached, fully closed
+    Targets are ordered nearest-to-farthest, so a confirmed close clears a
+    contiguous prefix of whatever remains — checked in order, stopping at the
+    first one it doesn't clear.
+    """
     direction = signal["direction"]
-    entry = signal["entry"]
-    target = signal["target"]
-    stop = signal["stop"]
-    risk = abs(entry - stop)
-    reward_actual = (price - entry) if direction == "long" else (entry - price)
-    r_multiple = reward_actual / risk if risk else 0.0
-    hit_target = price >= target if direction == "long" else price <= target
-    hit_stop = price <= stop if direction == "long" else price >= stop
-    if hit_target:
-        return "target", r_multiple
-    if hit_stop:
-        return "stop", r_multiple
-    return None
+    remaining = signal["targets"][signal["next_target_index"]:]
+
+    hit_indices = []
+    for offset, target in enumerate(remaining):
+        hit = price >= target["price"] if direction == "long" else price <= target["price"]
+        if not hit:
+            break
+        hit_indices.append(signal["next_target_index"] + offset)
+
+    if hit_indices:
+        event = "final_target" if len(hit_indices) == len(remaining) else "partial"
+        return {"event": event, "hit_indices": hit_indices}
+
+    stop = _active_stop(signal)
+    stop_hit = price <= stop if direction == "long" else price >= stop
+    return {"event": "stop"} if stop_hit else None
+
+
+def _apply_target_hits(signal: dict, hit_indices: list[int]) -> None:
+    """Mutates an open (still-active) signal in place to bank the given
+    targets: advances the ladder, moves the stop up, and folds each target's
+    R (weighted by its equal share of the position) into `realized_r`."""
+    portion_pct = 100.0 / len(signal["targets"])
+    for idx in hit_indices:
+        signal["realized_r"] = signal.get("realized_r", 0.0) + \
+            (portion_pct / 100.0) * signal["targets"][idx]["r_multiple"]
+    signal["closed_portion_pct"] = signal.get("closed_portion_pct", 0.0) + portion_pct * len(hit_indices)
+    signal["next_target_index"] = max(hit_indices) + 1
+
+
+def _finalize_signal(signal: dict, event: dict, price: float) -> tuple[str, float]:
+    """Computes the final blended outcome/R for a signal that is fully
+    closing (the last target reached, or the active stop breached). Pure —
+    the caller discards this signal record right after (see
+    _close_open_signal), so nothing is mutated here."""
+    realized_r = signal.get("realized_r", 0.0)
+    if event["event"] == "final_target":
+        portion_pct = 100.0 / len(signal["targets"])
+        for idx in event["hit_indices"]:
+            realized_r += (portion_pct / 100.0) * signal["targets"][idx]["r_multiple"]
+        return "target", realized_r
+
+    original_risk = abs(signal["entry"] - signal["initial_stop"])
+    direction = signal["direction"]
+    reward_actual = (price - signal["entry"]) if direction == "long" else (signal["entry"] - price)
+    exit_r = reward_actual / original_risk if original_risk else 0.0
+    remaining_pct = 100.0 - signal.get("closed_portion_pct", 0.0)
+    total_r = realized_r + (remaining_pct / 100.0) * exit_r
+    outcome = "partial_stop" if signal.get("closed_portion_pct", 0.0) > 0 else "stop"
+    return outcome, total_r
 
 
 def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe: str,
                         analysis: dict, frame: pd.DataFrame, chart_message_ids: dict) -> None:
     """Opens one hypothetical long/short scenario per asset, as a chart reply
     under its own post on each channel, if none is already open. Educational
-    only — see README. Stop is the nearby support/resistance level; target is the
-    farthest pivot level (searched across all fetched history) that still clears
-    config.MIN_SIGNAL_RISK_REWARD. If nothing does, no signal is opened."""
+    only — see README. The initial stop is the nearby support/resistance
+    level; targets are a scaled ladder of pivot levels (searched across all
+    fetched history, nearest to farthest, capped at config.SIGNAL_MAX_TARGETS)
+    whose farthest member still clears config.MIN_SIGNAL_RISK_REWARD. If
+    nothing clears it, no signal is opened."""
     symbol = asset["symbol"]
     if state_manager.get_open_signal(state, symbol):
         return
@@ -75,15 +139,20 @@ def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe
 
     levels = analysis["levels"]
     entry = analysis["price"]
-    stop = levels["support"] if direction == "long" else levels["resistance"]
-    target = indicators.find_extended_target(frame, direction, entry, stop)
-    if target is None:
+    initial_stop = levels["support"] if direction == "long" else levels["resistance"]
+    stop_touches = levels["support_touches"] if direction == "long" else levels["resistance_touches"]
+    targets = indicators.find_extended_targets(frame, direction, entry, initial_stop)
+    if not targets:
         print(f"Skipped hypothetical {direction} scenario for {asset['ticker']}: "
               f"no level clears the minimum {config.MIN_SIGNAL_RISK_REWARD:.0f}:1 reward:risk.")
         return
+    sizing = signal_record.compute_position_sizing(entry, initial_stop)
     signal_chart = chart_generator.generate_chart(
         frame, symbol, timeframe, levels,
-        signal={"direction": direction, "entry": entry, "target": target, "stop": stop},
+        signal={
+            "direction": direction, "entry": entry, "stop": initial_stop,
+            "targets": [t["price"] for t in targets],
+        },
     )
 
     signal_message_ids = {}
@@ -95,8 +164,8 @@ def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe
             continue
         try:
             caption = narrative_generator.generate_signal_post(
-                asset["ticker"], timeframe, direction, entry, target, stop,
-                analysis["trend"], analysis["rsi"], language=lang,
+                asset["ticker"], timeframe, direction, entry, targets, initial_stop, stop_touches,
+                analysis["trend"], analysis["rsi"], sizing, language=lang,
             )
             if lang == "en":
                 en_caption = caption
@@ -112,8 +181,10 @@ def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe
                 "timeframe": timeframe,
                 "direction": direction,
                 "entry": entry,
-                "target": target,
-                "stop": stop,
+                "targets": targets,
+                "stop": initial_stop,
+                "position_size_pct": sizing["position_size_pct"],
+                "leverage": sizing["leverage"],
                 "caption": caption,
                 "message_id": posted.get("message_id"),
             })
@@ -127,15 +198,21 @@ def _maybe_open_signal(state: dict, channels: list[dict], asset: dict, timeframe
     state_manager.open_signal(state, symbol, {
         "direction": direction,
         "entry": entry,
-        "target": target,
-        "stop": stop,
+        "initial_stop": initial_stop,
+        "targets": targets,
+        "next_target_index": 0,
+        "realized_r": 0.0,
+        "closed_portion_pct": 0.0,
+        "position_size_pct": sizing["position_size_pct"],
+        "leverage": sizing["leverage"],
         "timeframe": timeframe,
         "opened_at": time.time(),
         "message_ids": signal_message_ids,
         "message_id": signal_message_ids.get("en"),
     })
     _post_to_bluesky(en_caption, [signal_chart], "signal_open", signal=True)
-    print(f"Opened hypothetical {direction} scenario for {asset['ticker']}.")
+    print(f"Opened hypothetical {direction} scenario for {asset['ticker']} "
+          f"with {len(targets)} scaled target(s).")
 
 
 def check_followup(prev_entry: dict, current_price: float) -> dict | None:
@@ -452,13 +529,77 @@ def _technical_event(previous: dict | None, price: float, trend: str):
     return None
 
 
-def _close_open_signal(state: dict, channels: list[dict], asset: dict,
-                       open_signal: dict, price: float, close_time: str) -> None:
+def _post_partial_hit(state: dict, channels: list[dict], asset: dict, open_signal: dict,
+                      event: dict, close_time: str) -> None:
+    """A target was reached but others remain: reply under each channel's
+    signal post announcing it, then bank the hit(s) and ladder the stop up.
+    The mutation is applied only once at least one channel confirms posting,
+    same retry-safe pattern as _close_open_signal, so a total outage next
+    tick simply re-evaluates from the still-unbanked state."""
+    hit_targets = [open_signal["targets"][i] for i in event["hit_indices"]]
+    projected_next_index = max(event["hit_indices"]) + 1
+    projected_stop = _stop_for_index(open_signal, projected_next_index)
+    remaining_targets = open_signal["targets"][projected_next_index:]
+
+    signal_ids = _message_ids(open_signal)
+    posted_any = False
+    en_text = None
+    for channel in channels:
+        lang = channel["language"]
+        reply_to = signal_ids.get(lang)
+        if not reply_to:
+            continue
+        try:
+            text = narrative_generator.generate_signal_partial(
+                asset["ticker"], open_signal["timeframe"], open_signal["direction"],
+                hit_targets, projected_stop, remaining_targets, close_time, language=lang,
+            )
+            if lang == "en":
+                en_text = text
+            posted = telegram_publisher.reply_to_message(channel["chat_id"], reply_to, text)
+            state_manager.append_post_log({
+                "timestamp": time.time(),
+                "mode": "signal_partial",
+                "language": lang,
+                "ticker": asset["ticker"],
+                "symbol": asset["symbol"],
+                "hit_targets": hit_targets,
+                "new_stop": projected_stop,
+                "caption": text,
+                "message_id": posted.get("message_id"),
+            })
+            posted_any = True
+        except Exception as exc:
+            print(f"ERROR posting {asset['ticker']} partial target hit to '{lang}' channel: {exc}",
+                  file=sys.stderr)
+
+    if not posted_any:
+        print(f"Could not post {asset['ticker']} partial target hit on any channel; will retry.")
+        return
+    _apply_target_hits(open_signal, event["hit_indices"])
+    _post_to_bluesky(en_text, None, "signal_partial", signal=True)
+    print(f"{asset['ticker']} hit {len(hit_targets)} target(s); "
+          f"{len(remaining_targets)} remaining, stop now {projected_stop:,.4g}.")
+
+
+def _close_open_signal(state: dict, channels: list[dict], asset: dict, open_signal: dict,
+                       event: dict, price: float, close_time: str) -> None:
     """Reply with the scenario's outcome under each channel's signal post, then
-    close it. The track-record tally is logged exactly once (canonical
+    close it. `event` is the terminal event from _signal_progress — the final
+    target reached, or the active stop breached — either of which fully
+    closes the scenario even if some earlier targets were already banked via
+    partial hits. The track-record tally is logged exactly once (canonical
     `signal_close`); mirror channels log under `signal_close_mirror` so the
     scorecard, which counts `signal_close` records, never double-counts."""
-    outcome, r_multiple = _evaluate_signal(open_signal, price)  # caller ensured non-None
+    outcome, r_multiple = _finalize_signal(open_signal, event, price)
+    total_targets = len(open_signal["targets"])
+    if event["event"] == "final_target":
+        targets_hit = total_targets
+        exit_price = open_signal["targets"][event["hit_indices"][-1]]["price"]
+    else:
+        targets_hit = open_signal["next_target_index"]
+        exit_price = price
+
     # Fold this just-closed scenario into the tally before it is logged, so the
     # reply's running record includes itself. One asset is closing here, so its
     # open slot no longer counts.
@@ -480,7 +621,8 @@ def _close_open_signal(state: dict, channels: list[dict], asset: dict,
             record_line = signal_record.format_record_line(scorecard, lang)
             outcome_caption = narrative_generator.generate_signal_outcome(
                 asset["ticker"], open_signal["timeframe"], open_signal["direction"],
-                open_signal["entry"], price, outcome, r_multiple, close_time,
+                open_signal["entry"], exit_price, outcome, r_multiple, close_time,
+                targets_hit=targets_hit, total_targets=total_targets,
                 record_line=record_line, language=lang,
             )
             if lang == "en":
@@ -496,9 +638,11 @@ def _close_open_signal(state: dict, channels: list[dict], asset: dict,
                 "timeframe": open_signal["timeframe"],
                 "direction": open_signal["direction"],
                 "entry": open_signal["entry"],
-                "exit_price": price,
+                "exit_price": exit_price,
                 "outcome": outcome,
                 "r_multiple": r_multiple,
+                "targets_hit": targets_hit,
+                "total_targets": total_targets,
                 "caption": outcome_caption,
                 "message_id": outcome_posted.get("message_id"),
             })
@@ -513,7 +657,7 @@ def _close_open_signal(state: dict, channels: list[dict], asset: dict,
     state_manager.close_signal(state, asset["symbol"])
     _post_to_bluesky(en_caption, None, "signal_close", signal=True)
     print(f"Closed hypothetical {open_signal['direction']} scenario for "
-          f"{asset['ticker']}: {outcome} ({r_multiple:+.2f}R).")
+          f"{asset['ticker']}: {outcome} ({r_multiple:+.2f}R, {targets_hit}/{total_targets} targets).")
 
 
 def run_alert_scan(state: dict, channels: list[dict], force: bool = False) -> None:
@@ -539,8 +683,12 @@ def run_alert_scan(state: dict, channels: list[dict], force: bool = False) -> No
             continue
 
         open_signal = state_manager.get_open_signal(state, asset["symbol"])
-        if open_signal and _evaluate_signal(open_signal, price):
-            _close_open_signal(state, channels, asset, open_signal, price, close_time)
+        if open_signal:
+            progress = _signal_progress(open_signal, price)
+            if progress and progress["event"] == "partial":
+                _post_partial_hit(state, channels, asset, open_signal, progress, close_time)
+            elif progress:
+                _close_open_signal(state, channels, asset, open_signal, progress, price, close_time)
 
         if not force and previous and previous.get("candle_closed_at") == close_time:
             continue

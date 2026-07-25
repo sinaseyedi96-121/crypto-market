@@ -132,8 +132,9 @@ def _price_label(ax, value: float, label: str, color: str) -> None:
 
 def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict | None = None) -> str:
     """Renders the standard support/resistance chart, or — when `signal` is
-    given ({"direction", "entry", "target", "stop"}) — the same chart with
-    entry/target/stop lines for a just-opened hypothetical scenario instead."""
+    given ({"direction", "entry", "stop", "targets": [prices, nearest to
+    farthest]}) — the same chart with entry/stop/scaled-target lines for a
+    just-opened hypothetical scenario instead."""
     os.makedirs(config.CHART_DIR, exist_ok=True)
     suffix = "_signal" if signal else ""
     out_path = os.path.join(config.CHART_DIR, f"{symbol}_{timeframe}{suffix}.png")
@@ -149,11 +150,15 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict |
     ]
 
     if signal:
+        targets = signal["targets"]
+        # Nearest target drawn thickest, farthest thinnest, so the ladder reads
+        # left-to-right/near-to-far at a glance even before the labels are read.
+        target_widths = [1.25 - 0.25 * (i / max(len(targets) - 1, 1)) for i in range(len(targets))]
         hlines = {
-            "hlines": [signal["entry"], signal["target"], signal["stop"]],
-            "colors": [CURRENT, SUPPORT, RESISTANCE],
-            "linestyle": ["--", "-", "-"],
-            "linewidths": [1.3, 1.15, 1.15],
+            "hlines": [signal["entry"], *targets, signal["stop"]],
+            "colors": [CURRENT, *([SUPPORT] * len(targets)), RESISTANCE],
+            "linestyle": ["--", *(["-"] * len(targets)), "-"],
+            "linewidths": [1.3, *target_widths, 1.15],
             "alpha": 0.9,
         }
     else:
@@ -217,7 +222,19 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict |
     current_price = float(last["Close"])
     if signal:
         _price_label(price_ax, signal["entry"], "ENTRY", CURRENT)
-        _price_label(price_ax, signal["target"], "TARGET", SUPPORT)
+        placed = [signal["entry"]]
+        targets = signal["targets"]
+        y_min, y_max = price_ax.get_ylim()
+        min_gap = 0.035 * (y_max - y_min if y_max > y_min else 1.0)
+        for i, target_price in enumerate(targets):
+            is_final = i == len(targets) - 1
+            label = f"TP{i + 1}" + (" (FINAL)" if is_final else "")
+            # Nearest and final targets are always labeled; a crowded middle
+            # rung is skipped (the hline still renders) rather than overlap
+            # an already-placed label.
+            if i == 0 or is_final or all(abs(target_price - p) >= min_gap for p in placed):
+                _price_label(price_ax, target_price, label, SUPPORT)
+                placed.append(target_price)
         _price_label(price_ax, signal["stop"], "STOP", RESISTANCE)
     else:
         _price_label(price_ax, levels["support"], "SUPPORT", SUPPORT)

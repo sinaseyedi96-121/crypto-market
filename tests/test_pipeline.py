@@ -150,21 +150,41 @@ def tiered_pivot_frame() -> pd.DataFrame:
 
 
 class ExtendedTargetTests(unittest.TestCase):
-    def test_prefers_the_farthest_level_that_clears_the_bar(self):
+    def test_farthest_target_clears_the_bar(self):
         frame = tiered_pivot_frame()
-        target = indicators.find_extended_target(frame, "long", entry=100.0, stop=95.0,
-                                                   min_reward_risk=3.0)
-        self.assertAlmostEqual(target, 160.0, delta=1.0)
+        targets = indicators.find_extended_targets(frame, "long", entry=100.0, stop=95.0,
+                                                     min_reward_risk=3.0)
+        self.assertAlmostEqual(targets[-1]["price"], 160.0, delta=1.0)
 
-    def test_returns_none_when_nothing_clears_the_bar(self):
+    def test_nearer_pivots_become_a_ladder_ahead_of_the_final_target(self):
         frame = tiered_pivot_frame()
-        target = indicators.find_extended_target(frame, "long", entry=100.0, stop=-100.0,
-                                                   min_reward_risk=3.0)
-        self.assertIsNone(target)
+        targets = indicators.find_extended_targets(frame, "long", entry=100.0, stop=95.0,
+                                                     min_reward_risk=3.0)
+        # 110 and 130 are nearer qualifying pivots than the 160 floor-clearing one.
+        self.assertGreater(len(targets), 1)
+        prices = [t["price"] for t in targets]
+        self.assertEqual(prices, sorted(prices))
+        for target in targets:
+            self.assertIn("r_multiple", target)
+            self.assertIn("touches", target)
 
-    def test_returns_none_for_zero_risk(self):
+    def test_capped_at_max_targets(self):
         frame = tiered_pivot_frame()
-        self.assertIsNone(indicators.find_extended_target(frame, "long", entry=100.0, stop=100.0))
+        targets = indicators.find_extended_targets(frame, "long", entry=100.0, stop=95.0,
+                                                     min_reward_risk=3.0, max_targets=2)
+        self.assertEqual(len(targets), 2)
+        self.assertAlmostEqual(targets[-1]["price"], 160.0, delta=1.0)
+
+    def test_returns_empty_when_nothing_clears_the_bar(self):
+        frame = tiered_pivot_frame()
+        targets = indicators.find_extended_targets(frame, "long", entry=100.0, stop=-100.0,
+                                                     min_reward_risk=3.0)
+        self.assertEqual(targets, [])
+
+    def test_returns_empty_for_zero_risk(self):
+        frame = tiered_pivot_frame()
+        self.assertEqual(
+            indicators.find_extended_targets(frame, "long", entry=100.0, stop=100.0), [])
 
 
 class SetupVerdictTests(unittest.TestCase):
@@ -238,6 +258,35 @@ class SignalRecordTests(unittest.TestCase):
         self.assertIsNone(card["win_rate_pct"])
         self.assertIn("first hypothetical scenario", signal_record.format_record_line(card))
 
+    def test_win_loss_classified_by_r_multiple_sign_not_outcome_label(self):
+        # A scenario that banked a target before eventually stopping out (outcome
+        # "partial_stop") should still count as a win if its blended R came in positive.
+        path = self._write_log([
+            {"mode": "signal_close", "ticker": "BTC", "outcome": "partial_stop", "r_multiple": 0.4},
+            {"mode": "signal_close", "ticker": "ETH", "outcome": "partial_stop", "r_multiple": -0.2},
+        ])
+        card = signal_record.load_scorecard(open_count=0, path=path)
+        self.assertEqual(card["win_count"], 1)
+        self.assertEqual(card["loss_count"], 1)
+
+
+class PositionSizingTests(unittest.TestCase):
+    def test_sizing_hits_target_risk_when_under_the_leverage_cap(self):
+        # 5% stop distance, 1% target risk -> 20% of equity, no leverage needed.
+        sizing = signal_record.compute_position_sizing(100.0, 95.0, risk_pct=1.0, max_leverage=5.0)
+        self.assertAlmostEqual(sizing["position_size_pct"], 20.0)
+        self.assertAlmostEqual(sizing["leverage"], 1.0)
+        self.assertAlmostEqual(sizing["risk_pct"], 1.0)
+        self.assertFalse(sizing["capped"])
+
+    def test_sizing_caps_leverage_and_reports_reduced_realized_risk(self):
+        # 0.1% stop distance would need 10x for a 1% risk; capped at 5x instead.
+        sizing = signal_record.compute_position_sizing(100.0, 99.9, risk_pct=1.0, max_leverage=5.0)
+        self.assertAlmostEqual(sizing["leverage"], 5.0)
+        self.assertAlmostEqual(sizing["position_size_pct"], 500.0)
+        self.assertAlmostEqual(sizing["risk_pct"], 0.5)
+        self.assertTrue(sizing["capped"])
+
 
 class SchedulingTests(unittest.TestCase):
     def test_universe_has_ten_unique_non_stablecoin_assets(self):
@@ -284,29 +333,96 @@ class SchedulingTests(unittest.TestCase):
         self.assertEqual(main._signal_direction("bearish: fast EMA below slow EMA"), "short")
         self.assertIsNone(main._signal_direction("mixed/transitioning: no agreement"))
 
-    def test_evaluate_signal_long_target_and_stop(self):
-        signal = {"direction": "long", "entry": 100.0, "target": 110.0, "stop": 95.0}
-        outcome, r_multiple = main._evaluate_signal(signal, 111.0)
-        self.assertEqual(outcome, "target")
-        self.assertAlmostEqual(r_multiple, 2.2)
+    def _single_target_signal(self, direction="long"):
+        if direction == "long":
+            return {"direction": "long", "entry": 100.0, "initial_stop": 95.0,
+                    "targets": [{"price": 110.0, "r_multiple": 2.0, "touches": 1}],
+                    "next_target_index": 0, "realized_r": 0.0, "closed_portion_pct": 0.0}
+        return {"direction": "short", "entry": 100.0, "initial_stop": 105.0,
+                "targets": [{"price": 90.0, "r_multiple": 2.0, "touches": 1}],
+                "next_target_index": 0, "realized_r": 0.0, "closed_portion_pct": 0.0}
 
-        outcome, r_multiple = main._evaluate_signal(signal, 94.0)
+    def test_single_target_signal_reaches_final_target(self):
+        signal = self._single_target_signal("long")
+        progress = main._signal_progress(signal, 111.0)
+        self.assertEqual(progress, {"event": "final_target", "hit_indices": [0]})
+        outcome, r_multiple = main._finalize_signal(signal, progress, 111.0)
+        self.assertEqual(outcome, "target")
+        self.assertAlmostEqual(r_multiple, 2.0)  # the target's own R, not the overshoot price
+
+    def test_single_target_signal_hits_stop(self):
+        signal = self._single_target_signal("long")
+        progress = main._signal_progress(signal, 94.0)
+        self.assertEqual(progress, {"event": "stop"})
+        outcome, r_multiple = main._finalize_signal(signal, progress, 94.0)
         self.assertEqual(outcome, "stop")
         self.assertAlmostEqual(r_multiple, -1.2)
 
-        self.assertIsNone(main._evaluate_signal(signal, 102.0))
+    def test_single_target_signal_no_change_between_levels(self):
+        signal = self._single_target_signal("long")
+        self.assertIsNone(main._signal_progress(signal, 102.0))
 
-    def test_evaluate_signal_short_target_and_stop(self):
-        signal = {"direction": "short", "entry": 100.0, "target": 90.0, "stop": 105.0}
-        outcome, r_multiple = main._evaluate_signal(signal, 89.0)
+    def test_short_single_target_signal(self):
+        signal = self._single_target_signal("short")
+        progress = main._signal_progress(signal, 89.0)
+        outcome, r_multiple = main._finalize_signal(signal, progress, 89.0)
         self.assertEqual(outcome, "target")
-        self.assertAlmostEqual(r_multiple, 2.2)
+        self.assertAlmostEqual(r_multiple, 2.0)
 
-        outcome, r_multiple = main._evaluate_signal(signal, 106.0)
+        progress = main._signal_progress(signal, 106.0)
+        outcome, r_multiple = main._finalize_signal(signal, progress, 106.0)
         self.assertEqual(outcome, "stop")
         self.assertAlmostEqual(r_multiple, -1.2)
 
-        self.assertIsNone(main._evaluate_signal(signal, 98.0))
+        self.assertIsNone(main._signal_progress(signal, 98.0))
+
+    def _two_target_signal(self):
+        return {"direction": "long", "entry": 100.0, "initial_stop": 95.0,
+                "targets": [{"price": 110.0, "r_multiple": 2.0, "touches": 1},
+                            {"price": 130.0, "r_multiple": 6.0, "touches": 1}],
+                "next_target_index": 0, "realized_r": 0.0, "closed_portion_pct": 0.0}
+
+    def test_stop_ladders_up_as_targets_are_banked(self):
+        signal = self._two_target_signal()
+        self.assertEqual(main._active_stop(signal), 95.0)  # initial stop, nothing hit yet
+
+        progress = main._signal_progress(signal, 111.0)
+        self.assertEqual(progress, {"event": "partial", "hit_indices": [0]})
+        main._apply_target_hits(signal, progress["hit_indices"])
+        self.assertEqual(signal["next_target_index"], 1)
+        self.assertAlmostEqual(signal["realized_r"], 1.0)  # half the position at 2.0R
+        self.assertAlmostEqual(signal["closed_portion_pct"], 50.0)
+        self.assertEqual(main._active_stop(signal), 100.0)  # breakeven after TP1
+
+    def test_final_target_blends_r_across_both_portions(self):
+        signal = self._two_target_signal()
+        main._apply_target_hits(signal, main._signal_progress(signal, 111.0)["hit_indices"])
+
+        progress = main._signal_progress(signal, 131.0)
+        self.assertEqual(progress, {"event": "final_target", "hit_indices": [1]})
+        outcome, r_multiple = main._finalize_signal(signal, progress, 131.0)
+        self.assertEqual(outcome, "target")
+        self.assertAlmostEqual(r_multiple, 4.0)  # (2.0 + 6.0) / 2, equal-weighted halves
+
+    def test_partial_then_stopped_at_breakeven_nets_the_banked_r(self):
+        signal = self._two_target_signal()
+        main._apply_target_hits(signal, main._signal_progress(signal, 111.0)["hit_indices"])
+
+        progress = main._signal_progress(signal, 100.0)  # breakeven stop, TP2 never reached
+        self.assertEqual(progress, {"event": "stop"})
+        outcome, r_multiple = main._finalize_signal(signal, progress, 100.0)
+        self.assertEqual(outcome, "partial_stop")
+        self.assertAlmostEqual(r_multiple, 1.0)  # keeps the 1.0R already banked from TP1
+
+    def test_stop_for_index_ladder(self):
+        signal = {"direction": "long", "entry": 100.0, "initial_stop": 90.0,
+                  "targets": [{"price": 110.0, "r_multiple": 2.0, "touches": 1},
+                              {"price": 120.0, "r_multiple": 3.0, "touches": 1},
+                              {"price": 140.0, "r_multiple": 4.0, "touches": 1}]}
+        self.assertEqual(main._stop_for_index(signal, 0), 90.0)   # nothing hit: initial stop
+        self.assertEqual(main._stop_for_index(signal, 1), 100.0)  # after TP1: breakeven
+        self.assertEqual(main._stop_for_index(signal, 2), 110.0)  # after TP2: locks in TP1
+        self.assertEqual(main._stop_for_index(signal, 3), 120.0)  # after TP3: locks in TP2
 
 
 class NarrativeTests(unittest.TestCase):
@@ -385,8 +501,11 @@ class NarrativeTests(unittest.TestCase):
         self.assertTrue(result.endswith(config.DISCLAIMERS["fa"]))
 
     def test_signal_post_farsi_uses_farsi_signal_disclaimer(self):
+        targets = [{"price": 1900.0, "r_multiple": 1.0, "touches": 1}]
+        sizing = signal_record.compute_position_sizing(1800.0, 1700.0)
         result = narrative_generator.generate_signal_post(
-            "ETH", "1d", "long", 1800.0, 1900.0, 1700.0, "bullish: trend up", 55.0, language="fa"
+            "ETH", "1d", "long", 1800.0, targets, 1700.0, 2,
+            "bullish: trend up", 55.0, sizing, language="fa",
         )
         self.assertIn("لانگ", result)
         self.assertIn("ETH", result)
@@ -423,25 +542,76 @@ class NarrativeTests(unittest.TestCase):
         self.assertTrue(result.endswith(config.DISCLAIMER))
 
     def test_signal_post_labels_direction_and_hypothetical_disclaimer(self):
+        targets = [{"price": 1900.0, "r_multiple": 1.0, "touches": 1}]
+        sizing = signal_record.compute_position_sizing(1800.0, 1700.0)
         result = narrative_generator.generate_signal_post(
-            "ETH", "1d", "long", 1800.0, 1900.0, 1700.0, "bullish: trend up", 55.0
+            "ETH", "1d", "long", 1800.0, targets, 1700.0, 2,
+            "bullish: trend up", 55.0, sizing,
         )
         self.assertIn("LONG", result)
         self.assertIn("ETH", result)
         self.assertIn("Hypothetical", result)
+        self.assertIn("TP1", result)
+        self.assertIn("Position size", result)
+        self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMER))
+
+    def test_signal_post_multi_target_ladder_marks_the_final_one(self):
+        targets = [
+            {"price": 1900.0, "r_multiple": 1.0, "touches": 1},
+            {"price": 2200.0, "r_multiple": 4.0, "touches": 2},
+        ]
+        sizing = signal_record.compute_position_sizing(1800.0, 1700.0)
+        result = narrative_generator.generate_signal_post(
+            "ETH", "1d", "long", 1800.0, targets, 1700.0, 2,
+            "bullish: trend up", 55.0, sizing,
+        )
+        self.assertIn("TP1", result)
+        self.assertIn("TP2 (final)", result)
+        self.assertIn("tested 2×", result)  # the 2nd target's touch count
+
+    def test_signal_post_notes_capped_leverage(self):
+        targets = [{"price": 1900.0, "r_multiple": 1.0, "touches": 1}]
+        sizing = {"position_size_pct": 500.0, "leverage": 5.0, "risk_pct": 0.5, "capped": True}
+        result = narrative_generator.generate_signal_post(
+            "ETH", "1d", "long", 1800.0, targets, 1700.0, 1,
+            "bullish: trend up", 55.0, sizing,
+        )
+        self.assertIn("capped", result)
+
+    def test_signal_partial_names_hit_target_and_next_one(self):
+        hit_targets = [{"price": 1900.0, "r_multiple": 1.0, "touches": 1}]
+        remaining_targets = [{"price": 2200.0, "r_multiple": 4.0, "touches": 1}]
+        result = narrative_generator.generate_signal_partial(
+            "ETH", "1d", "long", hit_targets, 1800.0, remaining_targets, "2026-01-01T00:00:00",
+        )
+        self.assertIn("Target hit", result)
+        self.assertIn("1,900", result)
+        self.assertIn("Next target", result)
+        self.assertIn("2,200", result)
         self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMER))
 
     def test_signal_outcome_reports_result_and_disclaimer(self):
         result = narrative_generator.generate_signal_outcome(
-            "ETH", "1d", "long", 1800.0, 1900.0, "target", 2.0, "2026-01-01T00:00:00"
+            "ETH", "1d", "long", 1800.0, 1900.0, "target", 2.0, "2026-01-01T00:00:00",
+            targets_hit=1, total_targets=1,
         )
-        self.assertIn("TARGET HIT", result)
+        self.assertIn("ALL TARGETS REACHED", result)
         self.assertIn("+2.00R", result)
+        self.assertIn("1 of 1", result)
         self.assertTrue(result.endswith(config.SIGNAL_DISCLAIMER))
+
+    def test_signal_outcome_partial_stop_label(self):
+        result = narrative_generator.generate_signal_outcome(
+            "ETH", "1d", "long", 1800.0, 1800.0, "partial_stop", 1.0, "2026-01-01T00:00:00",
+            targets_hit=1, total_targets=2,
+        )
+        self.assertIn("PARTIAL TARGET, THEN STOP", result)
+        self.assertIn("1 of 2", result)
 
     def test_signal_outcome_appends_record_line(self):
         result = narrative_generator.generate_signal_outcome(
             "ETH", "1d", "long", 1800.0, 1900.0, "target", 2.0, "2026-01-01T00:00:00",
+            targets_hit=1, total_targets=1,
             record_line="📊 Track record so far: 3 scenarios closed",
         )
         self.assertIn("Track record so far", result)
@@ -560,7 +730,19 @@ class ChartTests(unittest.TestCase):
     def test_signal_chart_renders_entry_target_stop_labels(self):
         frame = synthetic_market()
         levels = indicators.find_key_levels(frame, lookback=180)
-        signal = {"direction": "long", "entry": 1800.0, "target": 1900.0, "stop": 1700.0}
+        signal = {"direction": "long", "entry": 1800.0, "stop": 1700.0, "targets": [1900.0]}
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
+            path = chart_generator.generate_chart(frame, "ETHUSDT", "1d", levels, signal=signal)
+            image = mpimg.imread(path)
+
+        self.assertTrue(os.path.basename(path).startswith("ETHUSDT_1d_signal"))
+        self.assertGreater(image.shape[1] / image.shape[0], 1.4)
+
+    def test_signal_chart_renders_a_scaled_target_ladder(self):
+        frame = synthetic_market()
+        levels = indicators.find_key_levels(frame, lookback=180)
+        signal = {"direction": "long", "entry": 1800.0, "stop": 1700.0,
+                  "targets": [1900.0, 2100.0, 2400.0, 3000.0]}
         with tempfile.TemporaryDirectory() as directory, patch.object(config, "CHART_DIR", directory):
             path = chart_generator.generate_chart(frame, "ETHUSDT", "1d", levels, signal=signal)
             image = mpimg.imread(path)
