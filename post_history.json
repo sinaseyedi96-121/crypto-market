@@ -462,6 +462,7 @@
     }
   },
   "_schedule_weekly": {
-    "weekly_digest": "2026-W29"
+    "weekly_digest": "2026-W29",
+    "signal_scorecard": "2026-W30"
   }
 }
