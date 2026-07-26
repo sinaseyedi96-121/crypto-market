@@ -429,42 +429,95 @@
     "SOLUSDT": {
       "direction": "short",
       "entry": 75.52,
-      "target": 67.71,
-      "stop": 87.29,
       "timeframe": "1d",
       "opened_at": 1784475399.8616574,
-      "message_id": 55
+      "message_id": 55,
+      "initial_stop": 87.29,
+      "targets": [
+        {
+          "price": 67.71,
+          "r_multiple": 0.66,
+          "touches": 1
+        }
+      ],
+      "next_target_index": 0,
+      "realized_r": 0.0,
+      "closed_portion_pct": 0.0,
+      "position_size_pct": 6.4,
+      "leverage": 1.0,
+      "message_ids": {
+        "en": 55
+      }
     },
     "XRPUSDT": {
       "direction": "short",
       "entry": 1.1124,
-      "target": 1.05,
-      "stop": 1.19,
       "timeframe": "1d",
       "opened_at": 1784644001.4132724,
-      "message_id": 72
+      "message_id": 72,
+      "initial_stop": 1.19,
+      "targets": [
+        {
+          "price": 1.05,
+          "r_multiple": 0.8,
+          "touches": 1
+        }
+      ],
+      "next_target_index": 0,
+      "realized_r": 0.0,
+      "closed_portion_pct": 0.0,
+      "position_size_pct": 14.3,
+      "leverage": 1.0,
+      "message_ids": {
+        "en": 72
+      }
     },
     "BNBUSDT": {
       "direction": "short",
       "entry": 573.95,
-      "target": 558.71,
-      "stop": 651.93,
       "timeframe": "1d",
       "opened_at": 1784730368.0320988,
-      "message_id": 80
+      "message_id": 80,
+      "initial_stop": 651.93,
+      "targets": [
+        {
+          "price": 558.71,
+          "r_multiple": 0.2,
+          "touches": 1
+        }
+      ],
+      "next_target_index": 0,
+      "realized_r": 0.0,
+      "closed_portion_pct": 0.0,
+      "position_size_pct": 7.4,
+      "leverage": 1.0,
+      "message_ids": {
+        "en": 80
+      }
     },
     "ETHUSDT": {
       "direction": "long",
       "entry": 1861.44,
-      "target": 4956.78,
-      "stop": 1508.84,
       "timeframe": "1d",
       "opened_at": 1784988896.0972314,
       "message_ids": {
         "en": 104,
         "fa": 8
       },
-      "message_id": 104
+      "message_id": 104,
+      "initial_stop": 1508.84,
+      "targets": [
+        {
+          "price": 4956.78,
+          "r_multiple": 8.78,
+          "touches": 1
+        }
+      ],
+      "next_target_index": 0,
+      "realized_r": 0.0,
+      "closed_portion_pct": 0.0,
+      "position_size_pct": 5.3,
+      "leverage": 1.0
     }
   },
   "_schedule_weekly": {
