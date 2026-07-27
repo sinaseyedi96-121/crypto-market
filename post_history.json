@@ -529,6 +529,7 @@
   },
   "_schedule_weekly": {
     "weekly_digest": "2026-W30",
-    "signal_scorecard": "2026-W30"
+    "signal_scorecard": "2026-W30",
+    "what_to_watch": "2026-W31"
   }
 }
