@@ -442,34 +442,59 @@ def run_deep_dive(state: dict, channels: list[dict], force: bool = False) -> Non
     timeframe = config.DEEP_DIVE_TIMEFRAME
     analyses = []
     chart_paths = []
+    anchor_positions = []   # index into chart_paths of each asset's "primary" (long) chart
     pending_state = []
 
-    for ticker in pair:
-        asset = _asset(ticker)
-        print(f"Preparing {ticker} {timeframe} deep dive.")
-        frame = data_fetcher.fetch_asset_klines(asset, timeframe, config.CANDLE_LIMIT)
-        frame = indicators.enrich(frame)
-        levels = indicators.find_key_levels(frame)
-        current_price = float(frame["Close"].iloc[-1])
-        candle_closed_at = frame["CloseTime"].iloc[-1].isoformat()
-        previous = state_manager.get_entry(state, asset["symbol"], timeframe)
+    try:
+        for ticker in pair:
+            asset = _asset(ticker)
+            print(f"Preparing {ticker} {timeframe} deep dive.")
+            frame = data_fetcher.fetch_asset_klines(asset, timeframe, config.CANDLE_LIMIT)
+            frame = indicators.enrich(frame)
+            levels = indicators.find_key_levels(frame)
+            current_price = float(frame["Close"].iloc[-1])
+            candle_closed_at = frame["CloseTime"].iloc[-1].isoformat()
+            previous = state_manager.get_entry(state, asset["symbol"], timeframe)
 
-        followup = check_followup(previous, current_price)
-        if followup and _message_ids(previous):
-            _post_followup(channels, ticker, timeframe, previous, followup)
+            followup = check_followup(previous, current_price)
+            if followup and _message_ids(previous):
+                _post_followup(channels, ticker, timeframe, previous, followup)
 
-        chart_paths.append(chart_generator.generate_chart(frame, asset["symbol"], timeframe, levels))
-        analyses.append({
-            "ticker": ticker,
-            "timeframe": timeframe,
-            "summary": indicators.summarize_for_prompt(frame, levels),
-            "trend": indicators.trend_state(frame),
-            "rsi": float(frame["rsi"].iloc[-1]),
-            "price": current_price,
-            "levels": levels,
-        })
-        pending_state.append((asset, levels, current_price, candle_closed_at, frame))
-        time.sleep(1)
+            chart_paths.append(chart_generator.generate_chart(frame, asset["symbol"], timeframe, levels))
+            anchor_positions.append(len(chart_paths) - 1)
+            # Near-term (4h) companion chart, posted right after the daily one so
+            # a reader sees both "the next few hours/days" and "the next few
+            # weeks/months" for this asset. Best-effort: never sinks the deep dive.
+            try:
+                short_frame = data_fetcher.fetch_asset_klines(
+                    asset, config.DEEP_DIVE_SHORT_TIMEFRAME, config.CANDLE_LIMIT
+                )
+                short_frame = indicators.enrich(short_frame)
+                short_levels = indicators.find_key_levels(short_frame)
+                chart_paths.append(chart_generator.generate_chart(
+                    short_frame, asset["symbol"], config.DEEP_DIVE_SHORT_TIMEFRAME, short_levels
+                ))
+            except Exception as exc:
+                print(f"Short-timeframe chart failed for {ticker}: {exc}", file=sys.stderr)
+
+            analyses.append({
+                "ticker": ticker,
+                "timeframe": timeframe,
+                "summary": indicators.summarize_for_prompt(frame, levels),
+                "trend": indicators.trend_state(frame),
+                "rsi": float(frame["rsi"].iloc[-1]),
+                "price": current_price,
+                "levels": levels,
+            })
+            pending_state.append((asset, levels, current_price, candle_closed_at, frame))
+            time.sleep(1)
+    except Exception as exc:
+        # A single asset's data feed being down (Binance + CoinGecko fallback
+        # both failing) used to crash the whole process and skip every other
+        # scheduled slot for the day. Log and bail on just today's deep dive
+        # instead — next scheduled run tries again.
+        print(f"ERROR preparing deep dive for {' + '.join(pair)}: {exc}", file=sys.stderr)
+        return
 
     fear_greed = data_fetcher.fetch_fear_greed_index()
     posted_by_lang = _publish_localized(
@@ -479,11 +504,13 @@ def run_deep_dive(state: dict, channels: list[dict], force: bool = False) -> Non
     )
 
     # Per-channel message IDs: the album's first message anchors follow-ups, and
-    # each asset's own chart within the album anchors its hypothetical scenario.
+    # each asset's own PRIMARY (long-timeframe) chart within the album anchors
+    # its hypothetical scenario — the companion short-timeframe chart is purely
+    # visual and isn't tracked as separate state.
     entry_ids = {lang: posted.get("message_id") for lang, posted in posted_by_lang.items()}
     posted_date = next(iter(posted_by_lang.values())).get("date")
     album_ids_by_lang = {
-        lang: (posted.get("album_message_ids") or [posted.get("message_id")] * len(pair))
+        lang: (posted.get("album_message_ids") or [posted.get("message_id")] * len(chart_paths))
         for lang, posted in posted_by_lang.items()
     }
     for index, ((asset, levels, current_price, candle_closed_at, frame), analysis) in enumerate(
@@ -497,7 +524,8 @@ def run_deep_dive(state: dict, channels: list[dict], force: bool = False) -> Non
             "posted_at": posted_date,
             "candle_closed_at": candle_closed_at,
         })
-        chart_message_ids = {lang: ids[index] for lang, ids in album_ids_by_lang.items()}
+        anchor = anchor_positions[index]
+        chart_message_ids = {lang: ids[anchor] for lang, ids in album_ids_by_lang.items()}
         _maybe_open_signal(state, channels, asset, timeframe, analysis, frame, chart_message_ids)
     _mark_slot(state, "deep_dive")
     print(f"Posted deep-dive album for {' + '.join(pair)}.")

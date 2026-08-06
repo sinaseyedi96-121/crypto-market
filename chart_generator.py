@@ -115,12 +115,14 @@ def _technical_headline(last, levels: dict) -> str:
 
 
 def _price_label(ax, value: float, label: str, color: str) -> None:
+    # Anchored near the LEFT edge, over the older candles — the right edge is
+    # the most recent price action and a label box sitting there covers it up.
     ax.text(
-        0.992,
+        0.008,
         value,
         f" {label}  {value:,.2f} ",
         transform=ax.get_yaxis_transform(),
-        ha="right",
+        ha="left",
         va="center",
         color=TEXT,
         fontsize=9,
@@ -261,9 +263,16 @@ def generate_chart(df, symbol: str, timeframe: str, levels: dict, signal: dict |
         Line2D([0], [0], color=EMA_SLOW, lw=2, label=f"EMA {config.EMA_SLOW}"),
         Line2D([0], [0], color=BB, lw=1, ls="--", label="Bollinger Bands"),
     ]
+    # Reserve an empty headroom band above the data/levels/targets, then park
+    # the legend in it — otherwise a resistance or far target that happens to
+    # sit at the top of the range draws its hline straight through the legend
+    # text (the line spans the full chart width regardless of where the price
+    # label is anchored).
+    y_min, y_max = price_ax.get_ylim()
+    price_ax.set_ylim(y_min, y_max + 0.12 * (y_max - y_min))
     price_ax.legend(
         handles=legend,
-        loc="upper left",
+        loc="upper right",
         ncol=3,
         frameon=False,
         labelcolor=MUTED,

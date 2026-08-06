@@ -30,7 +30,11 @@ DEEP_DIVE_ROTATION = [
     ("BTC", "ETH"),
     ("SOL", "HYPE"),
 ]
-DEEP_DIVE_TIMEFRAME = "1d"
+DEEP_DIVE_TIMEFRAME = "1d"                 # long view: weeks/months
+# Near-term companion chart posted alongside the daily one per asset, so a
+# reader sees both "the next few hours/days" and "the next few weeks/months"
+# in the same album. Reuses the interval the alert scanner already runs on.
+DEEP_DIVE_SHORT_TIMEFRAME = "4h"
 CANDLE_LIMIT = 500                         # enough history for indicators, long-term levels, and a
                                             # deep signal-target search (see find_extended_targets)
 

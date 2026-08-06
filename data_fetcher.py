@@ -65,7 +65,13 @@ def fetch_coingecko_ohlc(coin_id: str, interval: str, limit: int) -> pd.DataFram
         raise ValueError(f"CoinGecko fallback does not support {interval}")
 
     end = pd.Timestamp.now(tz="UTC")
-    history_days = math.ceil(limit * hours_per_candle / 24) + 2
+    # CoinGecko's free/demo API only serves the trailing 365 days of history —
+    # a request whose `from` reaches further back than that is rejected
+    # outright (400/401), which used to crash the whole deep-dive run for any
+    # asset that needs this fallback (e.g. HYPE, which isn't on Binance) at
+    # CANDLE_LIMIT=500 on the "1d" timeframe (~502 days back). Cap the window
+    # instead of asking for more history than the API will ever return.
+    history_days = min(math.ceil(limit * hours_per_candle / 24) + 2, 364)
     start = end - pd.Timedelta(days=history_days)
     cursor = start
     prices = []
