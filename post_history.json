@@ -21,21 +21,21 @@
     },
     "1d": {
       "levels": {
-        "support": 62202.44,
-        "resistance": 64696.42,
-        "support_touches": 3,
-        "resistance_touches": 2,
+        "support": 62220.58,
+        "resistance": 65544.13,
+        "support_touches": 4,
+        "resistance_touches": 3,
         "lookback": 180,
-        "zone_width": 659.46
+        "zone_width": 606.31
       },
-      "price_at_post": 63570.0,
+      "price_at_post": 64923.19,
       "message_ids": {
-        "en": 169,
-        "fa": 74
+        "en": 209,
+        "fa": 115
       },
-      "message_id": 169,
-      "posted_at": 1785770402,
-      "candle_closed_at": "2026-08-02T23:59:59.999000"
+      "message_id": 209,
+      "posted_at": 1786194883,
+      "candle_closed_at": "2026-08-07T23:59:59.999000"
     }
   },
   "ETHUSDT": {
@@ -59,26 +59,26 @@
     },
     "1d": {
       "levels": {
-        "support": 1841.72,
+        "support": 1906.79,
         "resistance": 2157.91,
-        "support_touches": 2,
+        "support_touches": 3,
         "resistance_touches": 3,
         "lookback": 180,
-        "zone_width": 26.32
+        "zone_width": 24.28
       },
-      "price_at_post": 1860.5,
+      "price_at_post": 1914.18,
       "message_ids": {
-        "en": 178,
-        "fa": 83
+        "en": 209,
+        "fa": 115
       },
-      "message_id": 178,
-      "posted_at": 1785854524,
-      "candle_closed_at": "2026-08-03T23:59:59.999000"
+      "message_id": 209,
+      "posted_at": 1786194883,
+      "candle_closed_at": "2026-08-07T23:59:59.999000"
     }
   },
   "_schedule": {
     "market_map": "2026-08-08",
-    "deep_dive": "2026-08-07",
+    "deep_dive": "2026-08-08",
     "macro_close": "2026-08-07",
     "daily_pulse": "2026-08-08"
   },
