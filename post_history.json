@@ -26,16 +26,16 @@
         "support_touches": 4,
         "resistance_touches": 3,
         "lookback": 180,
-        "zone_width": 606.31
+        "zone_width": 554.89
       },
-      "price_at_post": 64923.19,
+      "price_at_post": 64901.59,
       "message_ids": {
-        "en": 209,
-        "fa": 115
+        "en": 231,
+        "fa": 137
       },
-      "message_id": 209,
-      "posted_at": 1786194883,
-      "candle_closed_at": "2026-08-07T23:59:59.999000"
+      "message_id": 231,
+      "posted_at": 1786369670,
+      "candle_closed_at": "2026-08-09T23:59:59.999000"
     }
   },
   "ETHUSDT": {
@@ -78,7 +78,7 @@
   },
   "_schedule": {
     "market_map": "2026-08-10",
-    "deep_dive": "2026-08-09",
+    "deep_dive": "2026-08-10",
     "macro_close": "2026-08-07",
     "daily_pulse": "2026-08-10"
   },
@@ -186,16 +186,16 @@
         "support_touches": 3,
         "resistance_touches": 3,
         "lookback": 180,
-        "zone_width": 0.99
+        "zone_width": 0.98
       },
-      "price_at_post": 76.01,
+      "price_at_post": 76.27,
       "message_ids": {
-        "en": 218,
-        "fa": 123
+        "en": 231,
+        "fa": 137
       },
-      "message_id": 218,
-      "posted_at": 1786281480,
-      "candle_closed_at": "2026-08-08T23:59:59.999000"
+      "message_id": 231,
+      "posted_at": 1786369670,
+      "candle_closed_at": "2026-08-09T23:59:59.999000"
     }
   },
   "TRXUSDT": {
