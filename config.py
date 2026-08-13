@@ -133,7 +133,13 @@ REVIEWER_EDITABLE_FILES = ["narrative_generator.py", "config.py"]
 
 # ---- OpenAI (text generation) ----
 OPENAI_MODEL = "gpt-5.6-luna"
-OPENAI_MAX_TOKENS = 500
+# Luna is a reasoning model: hidden reasoning tokens are drawn from the SAME
+# completion budget as the visible caption. Keep reasoning light for these
+# short captions and give the budget generous headroom, so reasoning can never
+# starve the visible text into the deterministic fallback (the old 500 cap with
+# default "medium" effort could silently truncate a caption to nothing).
+OPENAI_REASONING_EFFORT = "low"
+OPENAI_MAX_TOKENS = 2000
 
 # ---- Telegram ----
 TELEGRAM_CAPTION_LIMIT = 1024              # Telegram's hard cap on photo captions

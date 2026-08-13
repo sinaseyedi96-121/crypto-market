@@ -223,6 +223,7 @@ def _complete(system_prompt: str, context: str, headline: str, fallback: str,
         system_prompt = system_prompt + _FARSI_DIRECTIVE
 
     body = ""
+    source = "fallback"
     try:
         response = _client().chat.completions.create(
             model=config.OPENAI_MODEL,
@@ -231,6 +232,7 @@ def _complete(system_prompt: str, context: str, headline: str, fallback: str,
                 {"role": "user", "content": context},
             ],
             max_completion_tokens=config.OPENAI_MAX_TOKENS,
+            reasoning_effort=config.OPENAI_REASONING_EFFORT,
         )
         content = response.choices[0].message.content or ""
         body = _format_for_telegram(content.strip())
@@ -239,6 +241,12 @@ def _complete(system_prompt: str, context: str, headline: str, fallback: str,
 
     if len(body) < 20:
         body = fallback
+    else:
+        source = "model"
+    # Diagnostic: record whether the live caption came from Luna or the
+    # deterministic template, so the model-vs-fallback rate is greppable in the
+    # Actions logs ([caption-path]) without a human reading every post.
+    print(f"[caption-path] source={source} lang={language} chars={len(body)}")
     return _fit_caption(f"{headline}\n\n{body}", disclaimer)
 
 
@@ -1054,6 +1062,7 @@ def generate_bluesky_caption(source_text: str, max_len: int = 250) -> str:
         f"Character budget: {max_len}. Compress this crypto post into one Bluesky post:\n\n{stripped}"
     )
     body = ""
+    source = "fallback"
     try:
         response = _client().chat.completions.create(
             model=config.OPENAI_MODEL,
@@ -1061,13 +1070,17 @@ def generate_bluesky_caption(source_text: str, max_len: int = 250) -> str:
                 {"role": "system", "content": BLUESKY_PROMPT},
                 {"role": "user", "content": context},
             ],
-            max_completion_tokens=200,
+            max_completion_tokens=config.OPENAI_MAX_TOKENS,
+            reasoning_effort=config.OPENAI_REASONING_EFFORT,
         )
         body = (response.choices[0].message.content or "").strip().strip('"').strip()
     except Exception as exc:
         print(f"OpenAI Bluesky caption unavailable; using headline: {exc}")
     if len(body) < 10:
         body = fallback
+    else:
+        source = "model"
+    print(f"[caption-path] source={source} lang=en kind=bluesky chars={len(body)}")
     body = " ".join(body.split())          # collapse to a single line
     if len(body) > max_len:
         body = body[: max_len - 1].rstrip() + "…"
