@@ -17,7 +17,7 @@ broad U.S. dollar index, derivatives positioning, and crypto-wide liquidity.
 - A Sunday weekly digest album: a 7-day performance ranking, an RSI/ATR%
   technical scoreboard across the universe, a BTC-dominance + Fear & Greed
   trend chart, and a total/stablecoin market-cap trend chart
-- A spaced DeepSeek V4 Pro overview: trend, momentum (RSI/MACD), volatility
+- A spaced GPT-5.6 Luna overview: trend, momentum (RSI/MACD), volatility
   (ATR/Bollinger), and the Fear & Greed Index
 - If price later breaks a zone flagged in an earlier post, a factual
   follow-up reply is posted under that original message
@@ -38,9 +38,9 @@ someone who knows financial-services regulation first.
 The same bot publishes every post to two channels: an English channel and a
 Farsi channel. The chart image is shared between them — numbers are numbers —
 so only the caption text is localized. Captions are generated natively in each
-language (a Farsi output directive on the DeepSeek prompt), and every
+language (a Farsi output directive on the OpenAI prompt), and every
 deterministic fallback, headline, and disclaimer has a Farsi variant, so the
-Farsi channel stays coherent even when DeepSeek is unavailable. Each post's
+Farsi channel stays coherent even when OpenAI is unavailable. Each post's
 footer links back to its own channel by name ("To the Moon 🚀" / "تحلیل بازار
 کریپتو").
 
@@ -57,7 +57,7 @@ their English labels; only the caption is translated.
 The English content is also mirrored to Bluesky (`bluesky_publisher.py`, AT
 Protocol) when `BLUESKY_HANDLE` and `BLUESKY_APP_PASSWORD` are set; without them
 Bluesky is skipped entirely. Because Bluesky caps a post at 300 characters, each
-mirror is a **purpose-built concise caption** (a separate short DeepSeek pass on
+mirror is a **purpose-built concise caption** (a separate short OpenAI pass on
 the English post) that teaches one idea and links back to the Telegram channel
 via a rich-text facet — not the full Telegram caption. Chart images are
 recompressed under Bluesky's ~1 MB blob limit (up to 4 images per post). Every
@@ -108,7 +108,7 @@ figures specifically.
 ## Content review
 
 A weekly GitHub Actions job (`content_review.yml`) sends recent post captions
-and the hypothetical-signal track record (win rate, average R) to DeepSeek for
+and the hypothetical-signal track record (win rate, average R) to OpenAI for
 a structured critique — scientific accuracy, audience/marketing quality, and
 whether the hypothetical scenarios are well-calibrated. If it proposes concrete
 wording or constant changes to `narrative_generator.py` / `config.py`, those
@@ -121,12 +121,12 @@ review as the PR description, for a human to read and merge.
 1. **Create the Telegram bot** (if you don't already have one for this) via
    [@BotFather](https://t.me/BotFather), and add it as admin to your channel.
 
-2. **Get a DeepSeek API key** at [platform.deepseek.com](https://platform.deepseek.com).
+2. **Get an OpenAI API key** at [platform.openai.com](https://platform.openai.com).
 
 3. **Push this to a new GitHub repo.**
 
 4. **Add required repo secrets** — Settings → Secrets and variables → Actions:
-   - `DEEPSEEK_KEY`
+   - `OPENAI_KEY`
    - `TELEGRAM_TOKEN`
    - `TELEGRAM_CHANNEL` (English channel, e.g. `@your_channel` or the numeric chat ID)
    - `TELEGRAM_CHANNEL_FA` (optional Farsi channel; omit to publish English only).
@@ -203,11 +203,11 @@ That keeps the source free and correctly labelled.
 | `data_fetcher.py` | Binance/CoinGecko OHLC, CoinGecko global/stablecoin/trending/derivatives data, FRED macro data, and sentiment |
 | `indicators.py` | RSI/EMA/MACD/Bollinger/ATR/rolling correlation, computed manually with pandas (not `pandas_ta`, which currently breaks on numpy ≥2.0) |
 | `chart_generator.py` | Renders every chart via `mplfinance`/`matplotlib` — candlesticks, rankings, scoreboards, and trend lines |
-| `narrative_generator.py` | DeepSeek calls for each post's write-up + the follow-up template |
+| `narrative_generator.py` | OpenAI calls for each post's write-up + the follow-up template |
 | `telegram_publisher.py` | Posts photo+caption, and reply-to-message for follow-ups |
 | `state_manager.py` | Persists last-posted levels/message IDs and open hypothetical signals to `post_history.json`, and appends every post to `posts_log.jsonl` |
 | `main.py` | Orchestrates all of the above |
-| `content_reviewer.py` | DeepSeek weekly critique of recent posts and signal track record; proposes narrative/config changes |
+| `content_reviewer.py` | OpenAI weekly critique of recent posts and signal track record; proposes narrative/config changes |
 
 ## Posting volume
 

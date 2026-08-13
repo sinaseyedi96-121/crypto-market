@@ -1,10 +1,10 @@
-"""Generate a readable market overview with DeepSeek's OpenAI-compatible API.
+"""Generate a readable market overview with OpenAI's API.
 
 Every public generator takes a ``language`` ("en" or "fa"). The chart image is
 shared across channels — numbers are numbers — so only the caption text is
-localized: the DeepSeek prompt gains a Farsi output directive, and the
+localized: the OpenAI prompt gains a Farsi output directive, and the
 deterministic fallbacks, headlines, and disclaimers all have Farsi variants so
-the Farsi channel stays coherent even when DeepSeek is unavailable.
+the Farsi channel stays coherent even when OpenAI is unavailable.
 """
 
 from __future__ import annotations
@@ -173,10 +173,7 @@ def _regime(language: str, trend: str) -> str:
 
 
 def _client() -> OpenAI:
-    return OpenAI(
-        api_key=os.environ["DEEPSEEK_KEY"],
-        base_url=config.DEEPSEEK_BASE_URL,
-    )
+    return OpenAI(api_key=os.environ["OPENAI_KEY"])
 
 
 def _format_for_telegram(text: str) -> str:
@@ -217,7 +214,7 @@ def _complete(system_prompt: str, context: str, headline: str, fallback: str,
               disclaimer: str | None = None, language: str = "en") -> str:
     """Always return a useful titled caption, even if the model returns no text.
 
-    `headline` and `fallback` must already be in `language`; only the DeepSeek
+    `headline` and `fallback` must already be in `language`; only the OpenAI
     output is language-switched here, via the Farsi directive.
     """
     if disclaimer is None:
@@ -228,17 +225,17 @@ def _complete(system_prompt: str, context: str, headline: str, fallback: str,
     body = ""
     try:
         response = _client().chat.completions.create(
-            model=config.DEEPSEEK_MODEL,
+            model=config.OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": context},
             ],
-            max_tokens=config.DEEPSEEK_MAX_TOKENS,
+            max_completion_tokens=config.OPENAI_MAX_TOKENS,
         )
         content = response.choices[0].message.content or ""
         body = _format_for_telegram(content.strip())
     except Exception as exc:
-        print(f"DeepSeek narrative unavailable; using factual fallback: {exc}")
+        print(f"OpenAI narrative unavailable; using factual fallback: {exc}")
 
     if len(body) < 20:
         body = fallback
@@ -1049,7 +1046,7 @@ def plain_text(caption: str) -> str:
 
 def generate_bluesky_caption(source_text: str, max_len: int = 250) -> str:
     """Compress an already-written English caption into a short Bluesky teaser
-    (English only). Falls back to the source's headline if DeepSeek is down."""
+    (English only). Falls back to the source's headline if OpenAI is down."""
     stripped = source_text.strip()
     headline = stripped.splitlines()[0] if stripped else "📊 Crypto market update"
     fallback = headline[:max_len].rstrip()
@@ -1059,16 +1056,16 @@ def generate_bluesky_caption(source_text: str, max_len: int = 250) -> str:
     body = ""
     try:
         response = _client().chat.completions.create(
-            model=config.DEEPSEEK_MODEL,
+            model=config.OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": BLUESKY_PROMPT},
                 {"role": "user", "content": context},
             ],
-            max_tokens=200,
+            max_completion_tokens=200,
         )
         body = (response.choices[0].message.content or "").strip().strip('"').strip()
     except Exception as exc:
-        print(f"DeepSeek Bluesky caption unavailable; using headline: {exc}")
+        print(f"OpenAI Bluesky caption unavailable; using headline: {exc}")
     if len(body) < 10:
         body = fallback
     body = " ".join(body.split())          # collapse to a single line

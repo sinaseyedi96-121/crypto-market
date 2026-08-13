@@ -59,7 +59,7 @@ jobs:
 
       - name: Run pipeline
         env:
-          DEEPSEEK_KEY: ${{ secrets.DEEPSEEK_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
           TELEGRAM_CHANNEL_FA: ${{ secrets.TELEGRAM_CHANNEL_FA }}

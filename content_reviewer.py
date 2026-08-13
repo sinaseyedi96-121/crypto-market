@@ -1,5 +1,5 @@
-"""Weekly DeepSeek critique of recent Telegram posts and the hypothetical
-signal track record. Reads posts_log.jsonl, asks DeepSeek for a structured
+"""Weekly OpenAI critique of recent Telegram posts and the hypothetical
+signal track record. Reads posts_log.jsonl, asks OpenAI for a structured
 review, and — only when it has a concrete, justified change — writes updated
 versions of narrative_generator.py and/or config.py for the calling workflow
 to test and open as a pull request. Never commits or pushes anything itself.
@@ -129,15 +129,15 @@ def _extract_review(response_text: str) -> tuple[str, dict[str, str]]:
     return review_markdown, proposed
 
 
-def _call_deepseek(context: str) -> str:
-    client = OpenAI(api_key=os.environ["DEEPSEEK_KEY"], base_url=config.DEEPSEEK_BASE_URL)
+def _call_openai(context: str) -> str:
+    client = OpenAI(api_key=os.environ["OPENAI_KEY"])
     response = client.chat.completions.create(
-        model=config.DEEPSEEK_MODEL,
+        model=config.OPENAI_MODEL,
         messages=[
             {"role": "system", "content": REVIEW_SYSTEM_PROMPT},
             {"role": "user", "content": context},
         ],
-        max_tokens=config.REVIEWER_MAX_TOKENS,
+        max_completion_tokens=config.REVIEWER_MAX_TOKENS,
     )
     return response.choices[0].message.content or ""
 
@@ -208,7 +208,7 @@ def main() -> None:
 
     source = _read_source(config.REVIEWER_EDITABLE_FILES)
     context = _build_context(posts, stats, source)
-    response = _call_deepseek(context)
+    response = _call_openai(context)
     review_markdown, proposed = _extract_review(response)
 
     written, notes = apply_proposed_changes(proposed)

@@ -122,7 +122,7 @@ SIGNAL_DISCLAIMERS = {
 }
 SIGNAL_DISCLAIMER = SIGNAL_DISCLAIMERS["en"]   # default/back-compat (English)
 
-# ---- Content review (weekly DeepSeek critique, see README) ----
+# ---- Content review (weekly OpenAI critique, see README) ----
 POSTS_LOG_FILE = "posts_log.jsonl"
 REVIEW_LOOKBACK_DAYS = 7
 REVIEW_REPORT_FILE = "review_report.md"
@@ -131,10 +131,9 @@ REVIEWER_MAX_TOKENS = 8000
 # prompt wording and tunable constants, never the trading/indicator logic.
 REVIEWER_EDITABLE_FILES = ["narrative_generator.py", "config.py"]
 
-# ---- DeepSeek (text generation) ----
-DEEPSEEK_MODEL = "deepseek-v4-pro"
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEEPSEEK_MAX_TOKENS = 500
+# ---- OpenAI (text generation) ----
+OPENAI_MODEL = "gpt-5.6-luna"
+OPENAI_MAX_TOKENS = 500
 
 # ---- Telegram ----
 TELEGRAM_CAPTION_LIMIT = 1024              # Telegram's hard cap on photo captions

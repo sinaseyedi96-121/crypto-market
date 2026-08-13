@@ -29,7 +29,7 @@ jobs:
       - name: Run content reviewer
         id: review
         env:
-          DEEPSEEK_KEY: ${{ secrets.DEEPSEEK_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         run: python content_reviewer.py
 
       - name: Open pull request with proposed changes
