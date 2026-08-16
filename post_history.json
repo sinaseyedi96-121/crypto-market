@@ -77,7 +77,7 @@
     }
   },
   "_schedule": {
-    "market_map": "2026-08-15",
+    "market_map": "2026-08-16",
     "deep_dive": "2026-08-15",
     "macro_close": "2026-08-14",
     "daily_pulse": "2026-08-15"
@@ -576,6 +576,12 @@
       "total_mcap": 2256174620659.391,
       "btc_dominance": 56.11243291830114,
       "stablecoin_mcap": 302089511267.0
+    },
+    {
+      "date": "2026-08-16",
+      "total_mcap": 2252645834901.413,
+      "btc_dominance": 56.18113179782359,
+      "stablecoin_mcap": 302062411022.0
     }
   ],
   "_signals": {
