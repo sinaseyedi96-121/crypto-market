@@ -76,7 +76,7 @@ LEVEL_CLUSTER_ATR_MULTIPLIER = 0.40        # merge nearby pivots into one level
 # If price moves this many % beyond a previously-flagged zone, post a follow-up
 # reply on the original message describing what happened.
 FOLLOWUP_THRESHOLD_PCT = 1.5
-MAX_EVENT_ALERTS_PER_DAY = 2
+MAX_EVENT_ALERTS_PER_DAY = 1
 
 # ---- What to watch (weekly forward-looking post, see README) ----
 # An asset is flagged as "one to watch" when the confirmed close sits within
