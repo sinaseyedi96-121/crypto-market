@@ -7,16 +7,16 @@
         "support_touches": 11,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 549.81
+        "zone_width": 541.35
       },
-      "price_at_post": 77221.98,
+      "price_at_post": 77028.94,
       "message_ids": {
         "en": 341,
         "fa": 244
       },
       "message_id": 341,
       "posted_at": 1787287846,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -46,16 +46,16 @@
         "support_touches": 14,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 20.15
+        "zone_width": 20.09
       },
-      "price_at_post": 2393.65,
+      "price_at_post": 2413.55,
       "message_ids": {
         "en": 329,
         "fa": 234
       },
       "message_id": 329,
       "posted_at": 1787190523,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -111,14 +111,14 @@
         "lookback": 180,
         "zone_width": 0.02
       },
-      "price_at_post": 1.4036,
+      "price_at_post": 1.3725,
       "message_ids": {
         "en": 296,
         "fa": 201
       },
       "message_id": 296,
       "posted_at": 1786931554,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     }
   },
@@ -130,16 +130,16 @@
         "support_touches": 5,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 3.61
+        "zone_width": 3.63
       },
-      "price_at_post": 679.11,
+      "price_at_post": 672.96,
       "message_ids": {
         "en": 330,
         "fa": 235
       },
       "message_id": 330,
       "posted_at": 1787190531,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -169,16 +169,16 @@
         "support_touches": 6,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 0.69
+        "zone_width": 0.68
       },
-      "price_at_post": 91.37,
+      "price_at_post": 90.96,
       "message_ids": {
         "en": 124,
         "fa": 29
       },
       "message_id": 124,
       "posted_at": 1785209423,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -210,14 +210,14 @@
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 0.34,
+      "price_at_post": 0.3402,
       "message_ids": {
         "en": 307,
         "fa": 212
       },
       "message_id": 307,
       "posted_at": 1787017651,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -242,21 +242,21 @@
   "HYPEUSDT": {
     "4h": {
       "levels": {
-        "support": 53.63,
-        "resistance": 77.42,
-        "support_touches": 5,
+        "support": 53.82,
+        "resistance": 76.97,
+        "support_touches": 7,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 0.63
+        "zone_width": 0.64
       },
-      "price_at_post": 77.42380401508696,
+      "price_at_post": 74.42079409947539,
       "message_ids": {
         "en": 276,
         "fa": 181
       },
       "message_id": 276,
       "posted_at": 1786758399,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -288,14 +288,14 @@
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 0.08382,
+      "price_at_post": 0.08493,
       "message_ids": {
         "en": 340,
         "fa": 243
       },
       "message_id": 340,
       "posted_at": 1787277292,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
@@ -327,13 +327,13 @@
         "lookback": 180,
         "zone_width": 0.03
       },
-      "price_at_post": 9.266050242801173,
+      "price_at_post": 9.293804602504363,
       "message_ids": {
         "en": 22
       },
       "message_id": 22,
       "posted_at": 1784100707,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bearish: fast EMA below slow EMA, price below slow EMA, fast EMA falling"
     },
     "1d": {
@@ -359,19 +359,19 @@
     "4h": {
       "levels": {
         "support": 477.09,
-        "resistance": 665.3,
+        "resistance": 686.92,
         "support_touches": 7,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 8.88
+        "zone_width": 9.29
       },
-      "price_at_post": 654.13,
+      "price_at_post": 680.51,
       "message_ids": {
         "en": 23
       },
       "message_id": 23,
       "posted_at": 1784100709,
-      "candle_closed_at": "2026-08-21T15:59:59.999000",
+      "candle_closed_at": "2026-08-21T19:59:59.999000",
       "trend": "bullish: fast EMA above slow EMA, price above slow EMA, fast EMA rising"
     },
     "1d": {
