@@ -79,7 +79,7 @@
   },
   "_schedule": {
     "market_map": "2026-08-23",
-    "deep_dive": "2026-08-22",
+    "deep_dive": "2026-08-23",
     "macro_close": "2026-08-21",
     "daily_pulse": "2026-08-23"
   },
@@ -183,21 +183,21 @@
     },
     "1d": {
       "levels": {
-        "support": 73.64,
-        "resistance": 75.15,
-        "support_touches": 3,
+        "support": 81.78,
+        "resistance": 98.05,
+        "support_touches": 4,
         "resistance_touches": 2,
         "lookback": 180,
-        "zone_width": 0.83
+        "zone_width": 1.59
       },
-      "price_at_post": 74.61,
+      "price_at_post": 93.82,
       "message_ids": {
-        "en": 301,
-        "fa": 206
+        "en": 365,
+        "fa": 268
       },
-      "message_id": 301,
-      "posted_at": 1786972164,
-      "candle_closed_at": "2026-08-16T23:59:59.999000"
+      "message_id": 365,
+      "posted_at": 1787490286,
+      "candle_closed_at": "2026-08-22T23:59:59.999000"
     }
   },
   "TRXUSDT": {
@@ -261,21 +261,21 @@
     },
     "1d": {
       "levels": {
-        "support": 58.91,
-        "resistance": 72.43,
-        "support_touches": 2,
+        "support": 38.28,
+        "resistance": 81.7,
+        "support_touches": 4,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 1.15
+        "zone_width": 1.35
       },
-      "price_at_post": 70.82111382764026,
+      "price_at_post": 78.78044840300855,
       "message_ids": {
-        "en": 334,
-        "fa": 239
+        "en": 365,
+        "fa": 268
       },
-      "message_id": 334,
-      "posted_at": 1787231668,
-      "candle_closed_at": "2026-08-19T23:59:59.999000"
+      "message_id": 365,
+      "posted_at": 1787490286,
+      "candle_closed_at": "2026-08-22T23:59:59.999000"
     }
   },
   "DOGEUSDT": {
@@ -729,6 +729,45 @@
         "fa": 262
       },
       "message_id": 359
+    },
+    "SOLUSDT": {
+      "direction": "long",
+      "entry": 93.82,
+      "initial_stop": 81.78,
+      "targets": [
+        {
+          "price": 218.0,
+          "r_multiple": 10.31,
+          "touches": 1
+        },
+        {
+          "price": 237.79,
+          "r_multiple": 11.96,
+          "touches": 1
+        },
+        {
+          "price": 249.6,
+          "r_multiple": 12.94,
+          "touches": 1
+        },
+        {
+          "price": 253.51,
+          "r_multiple": 13.26,
+          "touches": 1
+        }
+      ],
+      "next_target_index": 0,
+      "realized_r": 0.0,
+      "closed_portion_pct": 0.0,
+      "position_size_pct": 7.8,
+      "leverage": 1.0,
+      "timeframe": "1d",
+      "opened_at": 1787490314.469971,
+      "message_ids": {
+        "en": 368,
+        "fa": 271
+      },
+      "message_id": 368
     }
   },
   "_schedule_weekly": {
