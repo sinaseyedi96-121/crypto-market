@@ -60,47 +60,47 @@
     },
     "1d": {
       "levels": {
-        "support": 1839.78,
+        "support": 2246.23,
         "resistance": 2546.78,
-        "support_touches": 4,
+        "support_touches": 3,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 35.35
+        "zone_width": 38.39
       },
-      "price_at_post": 2516.3,
+      "price_at_post": 2482.31,
       "message_ids": {
-        "en": 355,
-        "fa": 258
+        "en": 389,
+        "fa": 292
       },
-      "message_id": 355,
-      "posted_at": 1787403781,
-      "candle_closed_at": "2026-08-21T23:59:59.999000"
+      "message_id": 389,
+      "posted_at": 1787663633,
+      "candle_closed_at": "2026-08-24T23:59:59.999000"
     }
   },
   "_schedule": {
     "market_map": "2026-08-25",
-    "deep_dive": "2026-08-24",
+    "deep_dive": "2026-08-25",
     "macro_close": "2026-08-24",
     "daily_pulse": "2026-08-25"
   },
   "XRPUSDT": {
     "1d": {
       "levels": {
-        "support": 0.99,
-        "resistance": 1.16,
-        "support_touches": 1,
+        "support": 1.05,
+        "resistance": 1.51,
+        "support_touches": 5,
         "resistance_touches": 2,
         "lookback": 180,
-        "zone_width": 0.01
+        "zone_width": 0.03
       },
-      "price_at_post": 1.003,
+      "price_at_post": 1.4817,
       "message_ids": {
-        "en": 311,
-        "fa": 216
+        "en": 389,
+        "fa": 292
       },
-      "message_id": 311,
-      "posted_at": 1787058686,
-      "candle_closed_at": "2026-08-17T23:59:59.999000"
+      "message_id": 389,
+      "posted_at": 1787663633,
+      "candle_closed_at": "2026-08-24T23:59:59.999000"
     },
     "4h": {
       "levels": {
@@ -780,6 +780,45 @@
         "fa": 271
       },
       "message_id": 368
+    },
+    "XRPUSDT": {
+      "direction": "long",
+      "entry": 1.4817,
+      "initial_stop": 1.05,
+      "targets": [
+        {
+          "price": 3.19,
+          "r_multiple": 3.95,
+          "touches": 1
+        },
+        {
+          "price": 3.34,
+          "r_multiple": 4.31,
+          "touches": 2
+        },
+        {
+          "price": 3.38,
+          "r_multiple": 4.4,
+          "touches": 1
+        },
+        {
+          "price": 3.66,
+          "r_multiple": 5.05,
+          "touches": 1
+        }
+      ],
+      "next_target_index": 0,
+      "realized_r": 0.0,
+      "closed_portion_pct": 0.0,
+      "position_size_pct": 3.4,
+      "leverage": 1.0,
+      "timeframe": "1d",
+      "opened_at": 1787663648.0311668,
+      "message_ids": {
+        "en": 393,
+        "fa": 296
+      },
+      "message_id": 393
     }
   },
   "_schedule_weekly": {
