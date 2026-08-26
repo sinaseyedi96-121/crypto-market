@@ -79,7 +79,7 @@
   },
   "_schedule": {
     "market_map": "2026-08-26",
-    "deep_dive": "2026-08-25",
+    "deep_dive": "2026-08-26",
     "macro_close": "2026-08-25",
     "daily_pulse": "2026-08-26"
   },
@@ -144,21 +144,21 @@
     },
     "1d": {
       "levels": {
-        "support": 557.11,
-        "resistance": 622.43,
-        "support_touches": 4,
-        "resistance_touches": 3,
+        "support": 558.81,
+        "resistance": 726.08,
+        "support_touches": 6,
+        "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 4.51
+        "zone_width": 8.15
       },
-      "price_at_post": 603.94,
+      "price_at_post": 694.41,
       "message_ids": {
-        "en": 321,
-        "fa": 226
+        "en": 400,
+        "fa": 303
       },
-      "message_id": 321,
-      "posted_at": 1787145123,
-      "candle_closed_at": "2026-08-18T23:59:59.999000"
+      "message_id": 400,
+      "posted_at": 1787750334,
+      "candle_closed_at": "2026-08-25T23:59:59.999000"
     }
   },
   "SOLUSDT": {
@@ -301,20 +301,20 @@
     "1d": {
       "levels": {
         "support": 0.07,
-        "resistance": 0.07,
-        "support_touches": 3,
-        "resistance_touches": 3,
+        "resistance": 0.1,
+        "support_touches": 6,
+        "resistance_touches": 2,
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 0.07026,
+      "price_at_post": 0.0857,
       "message_ids": {
-        "en": 321,
-        "fa": 226
+        "en": 400,
+        "fa": 303
       },
-      "message_id": 321,
-      "posted_at": 1787145123,
-      "candle_closed_at": "2026-08-18T23:59:59.999000"
+      "message_id": 400,
+      "posted_at": 1787750334,
+      "candle_closed_at": "2026-08-25T23:59:59.999000"
     }
   },
   "LEOUSDT": {
@@ -825,6 +825,84 @@
         "fa": 296
       },
       "message_id": 393
+    },
+    "BNBUSDT": {
+      "direction": "long",
+      "entry": 694.41,
+      "initial_stop": 558.81,
+      "targets": [
+        {
+          "price": 1161.9,
+          "r_multiple": 3.45,
+          "touches": 1
+        },
+        {
+          "price": 1182.6,
+          "r_multiple": 3.6,
+          "touches": 1
+        },
+        {
+          "price": 1349.99,
+          "r_multiple": 4.83,
+          "touches": 1
+        },
+        {
+          "price": 1375.11,
+          "r_multiple": 5.02,
+          "touches": 1
+        }
+      ],
+      "next_target_index": 0,
+      "realized_r": 0.0,
+      "closed_portion_pct": 0.0,
+      "position_size_pct": 5.1,
+      "leverage": 1.0,
+      "timeframe": "1d",
+      "opened_at": 1787750354.1268077,
+      "message_ids": {
+        "en": 404,
+        "fa": 307
+      },
+      "message_id": 404
+    },
+    "DOGEUSDT": {
+      "direction": "long",
+      "entry": 0.0857,
+      "initial_stop": 0.07,
+      "targets": [
+        {
+          "price": 0.26,
+          "r_multiple": 11.08,
+          "touches": 1
+        },
+        {
+          "price": 0.27,
+          "r_multiple": 11.77,
+          "touches": 1
+        },
+        {
+          "price": 0.29,
+          "r_multiple": 12.89,
+          "touches": 2
+        },
+        {
+          "price": 0.31,
+          "r_multiple": 14.09,
+          "touches": 1
+        }
+      ],
+      "next_target_index": 0,
+      "realized_r": 0.0,
+      "closed_portion_pct": 0.0,
+      "position_size_pct": 5.5,
+      "leverage": 1.0,
+      "timeframe": "1d",
+      "opened_at": 1787750370.285894,
+      "message_ids": {
+        "en": 405,
+        "fa": 308
+      },
+      "message_id": 405
     }
   },
   "_schedule_weekly": {
