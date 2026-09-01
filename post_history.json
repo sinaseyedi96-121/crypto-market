@@ -61,46 +61,46 @@
     "1d": {
       "levels": {
         "support": 2246.23,
-        "resistance": 2546.78,
+        "resistance": 2556.66,
         "support_touches": 3,
-        "resistance_touches": 1,
+        "resistance_touches": 2,
         "lookback": 180,
-        "zone_width": 38.27
+        "zone_width": 38.58
       },
-      "price_at_post": 2510.94,
+      "price_at_post": 2467.65,
       "message_ids": {
-        "en": 419,
-        "fa": 322
+        "en": 451,
+        "fa": 354
       },
-      "message_id": 419,
-      "posted_at": 1787955899,
-      "candle_closed_at": "2026-08-27T23:59:59.999000"
+      "message_id": 451,
+      "posted_at": 1788280988,
+      "candle_closed_at": "2026-08-31T23:59:59.999000"
     }
   },
   "_schedule": {
     "market_map": "2026-09-01",
-    "deep_dive": "2026-08-31",
+    "deep_dive": "2026-09-01",
     "macro_close": "2026-09-01",
     "daily_pulse": "2026-08-31"
   },
   "XRPUSDT": {
     "1d": {
       "levels": {
-        "support": 1.05,
-        "resistance": 1.51,
+        "support": 1.33,
+        "resistance": 1.46,
         "support_touches": 5,
         "resistance_touches": 2,
         "lookback": 180,
         "zone_width": 0.03
       },
-      "price_at_post": 1.4817,
+      "price_at_post": 1.3798,
       "message_ids": {
-        "en": 389,
-        "fa": 292
+        "en": 451,
+        "fa": 354
       },
-      "message_id": 389,
-      "posted_at": 1787663633,
-      "candle_closed_at": "2026-08-24T23:59:59.999000"
+      "message_id": 451,
+      "posted_at": 1788280988,
+      "candle_closed_at": "2026-08-31T23:59:59.999000"
     },
     "4h": {
       "levels": {
