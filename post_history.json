@@ -79,7 +79,7 @@
   },
   "_schedule": {
     "market_map": "2026-09-02",
-    "deep_dive": "2026-09-01",
+    "deep_dive": "2026-09-02",
     "macro_close": "2026-09-02",
     "daily_pulse": "2026-09-02"
   },
@@ -145,20 +145,20 @@
     "1d": {
       "levels": {
         "support": 558.81,
-        "resistance": 726.08,
+        "resistance": 723.04,
         "support_touches": 6,
-        "resistance_touches": 1,
+        "resistance_touches": 2,
         "lookback": 180,
-        "zone_width": 8.15
+        "zone_width": 7.88
       },
-      "price_at_post": 694.41,
+      "price_at_post": 683.0,
       "message_ids": {
-        "en": 400,
-        "fa": 303
+        "en": 459,
+        "fa": 362
       },
-      "message_id": 400,
-      "posted_at": 1787750334,
-      "candle_closed_at": "2026-08-25T23:59:59.999000"
+      "message_id": 459,
+      "posted_at": 1788367108,
+      "candle_closed_at": "2026-09-01T23:59:59.999000"
     }
   },
   "SOLUSDT": {
@@ -307,14 +307,14 @@
         "lookback": 180,
         "zone_width": 0.0
       },
-      "price_at_post": 0.0857,
+      "price_at_post": 0.08167,
       "message_ids": {
-        "en": 400,
-        "fa": 303
+        "en": 459,
+        "fa": 362
       },
-      "message_id": 400,
-      "posted_at": 1787750334,
-      "candle_closed_at": "2026-08-25T23:59:59.999000"
+      "message_id": 459,
+      "posted_at": 1788367108,
+      "candle_closed_at": "2026-09-01T23:59:59.999000"
     }
   },
   "LEOUSDT": {
