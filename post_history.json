@@ -78,7 +78,7 @@
     }
   },
   "_schedule": {
-    "market_map": "2026-09-02",
+    "market_map": "2026-09-03",
     "deep_dive": "2026-09-02",
     "macro_close": "2026-09-03",
     "daily_pulse": "2026-09-02"
@@ -686,6 +686,12 @@
       "total_mcap": 2603954152015.734,
       "btc_dominance": 59.07686596386079,
       "stablecoin_mcap": 305449617876.0
+    },
+    {
+      "date": "2026-09-03",
+      "total_mcap": 2618263689751.1665,
+      "btc_dominance": 59.5711621763346,
+      "stablecoin_mcap": 305602361721.0
     }
   ],
   "_signals": {
