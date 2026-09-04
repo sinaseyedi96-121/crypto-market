@@ -79,7 +79,7 @@
   },
   "_schedule": {
     "market_map": "2026-09-04",
-    "deep_dive": "2026-09-03",
+    "deep_dive": "2026-09-04",
     "macro_close": "2026-09-04",
     "daily_pulse": "2026-09-04"
   },
@@ -338,21 +338,21 @@
     },
     "1d": {
       "levels": {
-        "support": 8.93,
+        "support": 9.21,
         "resistance": 9.84,
         "support_touches": 2,
         "resistance_touches": 5,
         "lookback": 180,
         "zone_width": 0.07
       },
-      "price_at_post": 9.245571078771725,
+      "price_at_post": 9.322187596248687,
       "message_ids": {
-        "en": 413,
-        "fa": 316
+        "en": 478,
+        "fa": 381
       },
-      "message_id": 413,
-      "posted_at": 1787869120,
-      "candle_closed_at": "2026-08-26T23:59:59.999000"
+      "message_id": 478,
+      "posted_at": 1788539145,
+      "candle_closed_at": "2026-09-03T23:59:59.999000"
     }
   },
   "ZECUSDT": {
@@ -378,20 +378,20 @@
     "1d": {
       "levels": {
         "support": 458.86,
-        "resistance": 888.0,
+        "resistance": 979.69,
         "support_touches": 2,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 24.01
+        "zone_width": 27.2
       },
-      "price_at_post": 816.1,
+      "price_at_post": 952.69,
       "message_ids": {
-        "en": 413,
-        "fa": 316
+        "en": 478,
+        "fa": 381
       },
-      "message_id": 413,
-      "posted_at": 1787869120,
-      "candle_closed_at": "2026-08-26T23:59:59.999000"
+      "message_id": 478,
+      "posted_at": 1788539145,
+      "candle_closed_at": "2026-09-03T23:59:59.999000"
     }
   },
   "_alerts": {
