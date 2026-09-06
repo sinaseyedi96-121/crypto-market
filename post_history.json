@@ -79,7 +79,7 @@
   },
   "_schedule": {
     "market_map": "2026-09-06",
-    "deep_dive": "2026-09-05",
+    "deep_dive": "2026-09-06",
     "macro_close": "2026-09-05",
     "daily_pulse": "2026-09-06"
   },
@@ -183,21 +183,21 @@
     },
     "1d": {
       "levels": {
-        "support": 81.23,
+        "support": 81.42,
         "resistance": 110.6,
-        "support_touches": 6,
+        "support_touches": 5,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 2.09
+        "zone_width": 1.99
       },
-      "price_at_post": 101.75,
+      "price_at_post": 103.18,
       "message_ids": {
-        "en": 442,
-        "fa": 345
+        "en": 496,
+        "fa": 399
       },
-      "message_id": 442,
-      "posted_at": 1788203343,
-      "candle_closed_at": "2026-08-30T23:59:59.999000"
+      "message_id": 496,
+      "posted_at": 1788708660,
+      "candle_closed_at": "2026-09-05T23:59:59.999000"
     }
   },
   "TRXUSDT": {
@@ -266,16 +266,16 @@
         "support_touches": 4,
         "resistance_touches": 1,
         "lookback": 180,
-        "zone_width": 1.52
+        "zone_width": 1.49
       },
-      "price_at_post": 81.266550289095,
+      "price_at_post": 85.34970496903323,
       "message_ids": {
-        "en": 467,
-        "fa": 370
+        "en": 496,
+        "fa": 399
       },
-      "message_id": 467,
-      "posted_at": 1788452953,
-      "candle_closed_at": "2026-09-02T23:59:59.999000"
+      "message_id": 496,
+      "posted_at": 1788708660,
+      "candle_closed_at": "2026-09-05T23:59:59.999000"
     }
   },
   "DOGEUSDT": {
